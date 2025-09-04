@@ -60,9 +60,12 @@ check_status() {
         echo "    - 服务器: $public_ip"
         echo "    - 端口: $http_port"
         echo "    - 协议: HTTP"
-        if [ ! -z "$http_user" ]; then
-            echo "    - 用户名: $http_user"
-            echo "    - 密码: $http_pass"
+        # 检查配置文件中是否有BasicAuth配置
+        if [ -f "/etc/tinyproxy/tinyproxy.conf" ] && grep -q "^BasicAuth" /etc/tinyproxy/tinyproxy.conf; then
+            auth_line=$(grep "^BasicAuth" /etc/tinyproxy/tinyproxy.conf)
+            auth_user=$(echo $auth_line | awk '{print $2}')
+            echo "    - 认证: BasicAuth认证"
+            echo "    - 用户名: $auth_user"
         else
             echo "    - 认证: 无需认证"
         fi
