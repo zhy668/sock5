@@ -331,7 +331,48 @@ install_tinyproxy() {
 
     # 生成主配置文件
     TINYPROXY_CONF="/etc/tinyproxy/tinyproxy.conf"
-    tee $TINYPROXY_CONF > /dev/null <<EOF
+    if [ ! -z "$HTTP_USER" ]; then
+        echo ">>> [3/7] 正在配置用户认证..."
+        # 创建密码文件
+        echo "$HTTP_USER:$HTTP_PASS" > /etc/tinyproxy/tinyproxy.passwd
+        chmod 600 /etc/tinyproxy/tinyproxy.passwd
+        chown tinyproxy:tinyproxy /etc/tinyproxy/tinyproxy.passwd
+
+        # 生成带认证的配置文件
+        tee $TINYPROXY_CONF > /dev/null <<EOF
+# Tinyproxy 配置文件
+User tinyproxy
+Group tinyproxy
+
+Port $HTTP_PORT
+Listen 0.0.0.0
+
+Timeout 600
+LogFile "/var/log/tinyproxy/tinyproxy.log"
+LogLevel Info
+PidFile "/run/tinyproxy/tinyproxy.pid"
+
+MaxClients 100
+
+# 允许所有IP访问
+Allow 0.0.0.0/0
+
+# 禁用Via头部以提高匿名性
+DisableViaHeader Yes
+
+# 允许的连接端口
+ConnectPort 443
+ConnectPort 563
+ConnectPort 80
+
+# 启用基本认证
+BasicAuth /etc/tinyproxy/tinyproxy.passwd
+EOF
+        echo ">>> 用户认证配置完成。"
+    else
+        echo ">>> [3/7] 跳过用户认证配置（未启用）。"
+        # 生成无认证的配置文件
+        tee $TINYPROXY_CONF > /dev/null <<EOF
 # Tinyproxy 配置文件
 User tinyproxy
 Group tinyproxy
@@ -357,22 +398,6 @@ ConnectPort 443
 ConnectPort 563
 ConnectPort 80
 EOF
-
-    # 如果启用认证，添加认证配置
-    if [ ! -z "$HTTP_USER" ]; then
-        echo ">>> [3/7] 正在配置用户认证..."
-        # 创建密码文件
-        echo "$HTTP_USER:$HTTP_PASS" > /etc/tinyproxy/tinyproxy.passwd
-        chmod 600 /etc/tinyproxy/tinyproxy.passwd
-        chown tinyproxy:tinyproxy /etc/tinyproxy/tinyproxy.passwd
-
-        # 在配置文件中启用认证
-        echo "" >> $TINYPROXY_CONF
-        echo "# 启用基本认证" >> $TINYPROXY_CONF
-        echo "BasicAuth /etc/tinyproxy/tinyproxy.passwd" >> $TINYPROXY_CONF
-        echo ">>> 用户认证配置完成。"
-    else
-        echo ">>> [3/7] 跳过用户认证配置（未启用）。"
     fi
 
     echo ">>> 配置文件生成完成。"
