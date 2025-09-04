@@ -1,0 +1,158 @@
+name: Build Tinyproxy Binaries
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            cc: gcc
+          - arch: arm64
+            platform: linux/arm64
+            cc: aarch64-linux-gnu-gcc
+          - arch: armv7
+            platform: linux/arm/v7
+            cc: arm-linux-gnueabihf-gcc
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v2
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Install cross-compilation tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
+
+    - name: Clone tinyproxy source
+      run: |
+        git clone https://github.com/tinyproxy/tinyproxy.git
+        cd tinyproxy
+        echo "TINYPROXY_VERSION=$(cat VERSION)" >> $GITHUB_ENV
+
+    - name: Build tinyproxy for ${{ matrix.arch }}
+      run: |
+        cd tinyproxy
+        ./autogen.sh
+        
+        if [ "${{ matrix.arch }}" = "amd64" ]; then
+          ./configure --prefix=/usr --sysconfdir=/etc/tinyproxy --enable-upstream --enable-transparent
+          make
+          strip src/tinyproxy
+        elif [ "${{ matrix.arch }}" = "arm64" ]; then
+          CC=aarch64-linux-gnu-gcc ./configure --host=aarch64-linux-gnu --prefix=/usr --sysconfdir=/etc/tinyproxy --enable-upstream --enable-transparent
+          make CC=aarch64-linux-gnu-gcc
+          aarch64-linux-gnu-strip src/tinyproxy
+        elif [ "${{ matrix.arch }}" = "armv7" ]; then
+          CC=arm-linux-gnueabihf-gcc ./configure --host=arm-linux-gnueabihf --prefix=/usr --sysconfdir=/etc/tinyproxy --enable-upstream --enable-transparent
+          make CC=arm-linux-gnueabihf-gcc
+          arm-linux-gnueabihf-strip src/tinyproxy
+        fi
+
+    - name: Create release package
+      run: |
+        cd tinyproxy
+        mkdir -p ../release
+        cp src/tinyproxy ../release/tinyproxy-${{ matrix.arch }}
+        cp docs/man8/tinyproxy.8 ../release/ 2>/dev/null || echo "Man page not found"
+        
+        # Create version info
+        echo "Tinyproxy $(cat VERSION)" > ../release/VERSION-${{ matrix.arch }}
+        echo "Built on: $(date)" >> ../release/VERSION-${{ matrix.arch }}
+        echo "Architecture: ${{ matrix.arch }}" >> ../release/VERSION-${{ matrix.arch }}
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: tinyproxy-${{ matrix.arch }}
+        path: release/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      
+    - name: Create release directory
+      run: |
+        mkdir -p release
+        cp tinyproxy-amd64/* release/ 2>/dev/null || true
+        cp tinyproxy-arm64/* release/ 2>/dev/null || true  
+        cp tinyproxy-armv7/* release/ 2>/dev/null || true
+        ls -la release/
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: tinyproxy-binaries-${{ github.run_number }}
+        release_name: Tinyproxy Binaries Build ${{ github.run_number }}
+        body: |
+          预编译的 Tinyproxy 二进制文件
+          
+          支持的架构:
+          - amd64 (x86_64)
+          - arm64 (aarch64) 
+          - armv7 (arm)
+          
+          使用方法:
+          ```bash
+          # 下载对应架构的二进制文件
+          wget https://github.com/zhy668/sock5/releases/download/tinyproxy-binaries-${{ github.run_number }}/tinyproxy-amd64
+          chmod +x tinyproxy-amd64
+          sudo mv tinyproxy-amd64 /usr/bin/tinyproxy
+          ```
+        draft: false
+        prerelease: false
+
+    - name: Upload amd64 binary
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./release/tinyproxy-amd64
+        asset_name: tinyproxy-amd64
+        asset_content_type: application/octet-stream
+
+    - name: Upload arm64 binary
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./release/tinyproxy-arm64
+        asset_name: tinyproxy-arm64
+        asset_content_type: application/octet-stream
+      continue-on-error: true
+
+    - name: Upload armv7 binary
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./release/tinyproxy-armv7
+        asset_name: tinyproxy-armv7
+        asset_content_type: application/octet-stream
+      continue-on-error: true
