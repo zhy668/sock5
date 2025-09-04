@@ -318,7 +318,7 @@ install_tinyproxy() {
     echo ">>> [2/7] 正在生成配置文件..."
     mkdir -p /etc/tinyproxy
     mkdir -p /var/log/tinyproxy
-    mkdir -p /var/run/tinyproxy
+    mkdir -p /run/tinyproxy
 
     # 创建tinyproxy用户
     if ! id "tinyproxy" &>/dev/null; then
@@ -327,7 +327,7 @@ install_tinyproxy() {
 
     # 设置目录权限
     chown tinyproxy:tinyproxy /var/log/tinyproxy
-    chown tinyproxy:tinyproxy /var/run/tinyproxy
+    chown tinyproxy:tinyproxy /run/tinyproxy
 
     # 生成主配置文件
     TINYPROXY_CONF="/etc/tinyproxy/tinyproxy.conf"
@@ -342,13 +342,9 @@ Listen 0.0.0.0
 Timeout 600
 LogFile "/var/log/tinyproxy/tinyproxy.log"
 LogLevel Info
-PidFile "/var/run/tinyproxy/tinyproxy.pid"
+PidFile "/run/tinyproxy/tinyproxy.pid"
 
 MaxClients 100
-MinSpareServers 5
-MaxSpareServers 20
-StartServers 10
-MaxRequestsPerChild 0
 
 # 允许所有IP访问
 Allow 0.0.0.0/0
@@ -396,7 +392,7 @@ User=tinyproxy
 Group=tinyproxy
 ExecStart=/usr/bin/tinyproxy -c /etc/tinyproxy/tinyproxy.conf
 ExecReload=/bin/kill -HUP \$MAINPID
-PIDFile=/var/run/tinyproxy/tinyproxy.pid
+PIDFile=/run/tinyproxy/tinyproxy.pid
 Restart=on-failure
 RestartSec=5
 
@@ -545,7 +541,7 @@ uninstall_tinyproxy() {
         echo ">>> [5/6] 正在清理配置文件和日志..."
         rm -rf /etc/tinyproxy
         rm -rf /var/log/tinyproxy
-        rm -rf /var/run/tinyproxy
+        rm -rf /run/tinyproxy
 
         # 删除用户
         echo ">>> [6/6] 正在删除 tinyproxy 用户..."

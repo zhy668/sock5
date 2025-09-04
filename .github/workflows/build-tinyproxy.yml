@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
@@ -35,10 +35,10 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    - name: Install cross-compilation tools
+    - name: Install cross-compilation tools and musl
       run: |
         sudo apt-get update
-        sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
+        sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf musl-tools musl-dev
 
     - name: Clone tinyproxy source
       run: |
@@ -50,18 +50,19 @@ jobs:
       run: |
         cd tinyproxy
         ./autogen.sh
-        
+
         if [ "${{ matrix.arch }}" = "amd64" ]; then
-          ./configure --prefix=/usr --sysconfdir=/etc/tinyproxy --enable-upstream --enable-transparent
-          make
+          # 静态编译以解决GLIBC兼容性问题
+          CFLAGS="-static" LDFLAGS="-static" ./configure --prefix=/usr --sysconfdir=/etc/tinyproxy --enable-upstream --enable-transparent --disable-shared
+          make LDFLAGS="-static"
           strip src/tinyproxy
         elif [ "${{ matrix.arch }}" = "arm64" ]; then
-          CC=aarch64-linux-gnu-gcc ./configure --host=aarch64-linux-gnu --prefix=/usr --sysconfdir=/etc/tinyproxy --enable-upstream --enable-transparent
-          make CC=aarch64-linux-gnu-gcc
+          CC=aarch64-linux-gnu-gcc CFLAGS="-static" LDFLAGS="-static" ./configure --host=aarch64-linux-gnu --prefix=/usr --sysconfdir=/etc/tinyproxy --enable-upstream --enable-transparent --disable-shared
+          make CC=aarch64-linux-gnu-gcc LDFLAGS="-static"
           aarch64-linux-gnu-strip src/tinyproxy
         elif [ "${{ matrix.arch }}" = "armv7" ]; then
-          CC=arm-linux-gnueabihf-gcc ./configure --host=arm-linux-gnueabihf --prefix=/usr --sysconfdir=/etc/tinyproxy --enable-upstream --enable-transparent
-          make CC=arm-linux-gnueabihf-gcc
+          CC=arm-linux-gnueabihf-gcc CFLAGS="-static" LDFLAGS="-static" ./configure --host=arm-linux-gnueabihf --prefix=/usr --sysconfdir=/etc/tinyproxy --enable-upstream --enable-transparent --disable-shared
+          make CC=arm-linux-gnueabihf-gcc LDFLAGS="-static"
           arm-linux-gnueabihf-strip src/tinyproxy
         fi
 
@@ -85,7 +86,7 @@ jobs:
 
   release:
     needs: build
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master'
     
     steps:
