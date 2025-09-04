@@ -333,11 +333,6 @@ install_tinyproxy() {
     TINYPROXY_CONF="/etc/tinyproxy/tinyproxy.conf"
     if [ ! -z "$HTTP_USER" ]; then
         echo ">>> [3/7] 正在配置用户认证..."
-        # 创建密码文件
-        echo "$HTTP_USER:$HTTP_PASS" > /etc/tinyproxy/tinyproxy.passwd
-        chmod 600 /etc/tinyproxy/tinyproxy.passwd
-        chown tinyproxy:tinyproxy /etc/tinyproxy/tinyproxy.passwd
-
         # 生成带认证的配置文件
         tee $TINYPROXY_CONF > /dev/null <<EOF
 # Tinyproxy 配置文件
@@ -366,7 +361,7 @@ ConnectPort 563
 ConnectPort 80
 
 # 启用基本认证
-BasicAuth /etc/tinyproxy/tinyproxy.passwd
+BasicAuth $HTTP_USER $HTTP_PASS
 EOF
         echo ">>> 用户认证配置完成。"
     else
