@@ -52,16 +52,16 @@ jobs:
         ./autogen.sh
 
         if [ "${{ matrix.arch }}" = "amd64" ]; then
-          # 静态编译以解决GLIBC兼容性问题
-          CFLAGS="-static" LDFLAGS="-static" ./configure --prefix=/usr --sysconfdir=/etc/tinyproxy --enable-upstream --enable-transparent --disable-shared
+          # 静态编译以解决GLIBC兼容性问题，启用BasicAuth支持
+          CFLAGS="-static" LDFLAGS="-static" ./configure --prefix=/usr --sysconfdir=/etc/tinyproxy --enable-upstream --enable-transparent --enable-basicauth --disable-shared
           make LDFLAGS="-static"
           strip src/tinyproxy
         elif [ "${{ matrix.arch }}" = "arm64" ]; then
-          CC=aarch64-linux-gnu-gcc CFLAGS="-static" LDFLAGS="-static" ./configure --host=aarch64-linux-gnu --prefix=/usr --sysconfdir=/etc/tinyproxy --enable-upstream --enable-transparent --disable-shared
+          CC=aarch64-linux-gnu-gcc CFLAGS="-static" LDFLAGS="-static" ./configure --host=aarch64-linux-gnu --prefix=/usr --sysconfdir=/etc/tinyproxy --enable-upstream --enable-transparent --enable-basicauth --disable-shared
           make CC=aarch64-linux-gnu-gcc LDFLAGS="-static"
           aarch64-linux-gnu-strip src/tinyproxy
         elif [ "${{ matrix.arch }}" = "armv7" ]; then
-          CC=arm-linux-gnueabihf-gcc CFLAGS="-static" LDFLAGS="-static" ./configure --host=arm-linux-gnueabihf --prefix=/usr --sysconfdir=/etc/tinyproxy --enable-upstream --enable-transparent --disable-shared
+          CC=arm-linux-gnueabihf-gcc CFLAGS="-static" LDFLAGS="-static" ./configure --host=arm-linux-gnueabihf --prefix=/usr --sysconfdir=/etc/tinyproxy --enable-upstream --enable-transparent --enable-basicauth --disable-shared
           make CC=arm-linux-gnueabihf-gcc LDFLAGS="-static"
           arm-linux-gnueabihf-strip src/tinyproxy
         fi
