@@ -45,6 +45,7 @@ jobs:
         git clone https://github.com/tinyproxy/tinyproxy.git
         cd tinyproxy
         echo "TINYPROXY_VERSION=$(cat VERSION)" >> $GITHUB_ENV
+        echo "Force rebuild with BasicAuth support - v2"
 
     - name: Build tinyproxy for ${{ matrix.arch }}
       run: |
