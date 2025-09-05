@@ -24,6 +24,28 @@ check_root() {
     exit 1
   fi
 }
+# 临时切换APT镜像到腾讯（仅当安装失败时触发，可还原）
+APT_SRC_BACKUP="/etc/apt/sources.list.bak.sock5"
+switch_apt_to_tencent() {
+  if [ ! -f "$APT_SRC_BACKUP" ]; then
+    cp -f /etc/apt/sources.list "$APT_SRC_BACKUP" 2>/dev/null || true
+  fi
+  cat >/etc/apt/sources.list <<'EOF_SOURCES'
+deb http://mirrors.tencent.com/ubuntu/ focal main restricted universe multiverse
+deb http://mirrors.tencent.com/ubuntu/ focal-updates main restricted universe multiverse
+deb http://mirrors.tencent.com/ubuntu/ focal-backports main restricted universe multiverse
+deb http://mirrors.tencent.com/ubuntu/ focal-security main restricted universe multiverse
+EOF_SOURCES
+  apt_smart_update_if_needed
+}
+restore_apt_sources_if_needed() {
+  if [ -f "$APT_SRC_BACKUP" ]; then
+    cp -f "$APT_SRC_BACKUP" /etc/apt/sources.list 2>/dev/null || true
+    rm -f "$APT_SRC_BACKUP" 2>/dev/null || true
+    apt_smart_update_if_needed
+  fi
+}
+
 # ---------------- APT/YUM 加速与智能更新（仅脚本内生效） ----------------
 # 说明：
 # - 不修改系统源，仅在命令层面优化：强制IPv4、超时、重试、跳过推荐包、等待锁
@@ -234,7 +256,17 @@ install_dante() {
     echo ">>> [2/6] 正在配置PAM认证模块..."
     # B方案：使用 libpam-pwdfile 与独立口令文件
     apt_smart_update_if_needed
-    measure "安装 libpam-pwdfile 与 htpasswd" apt_fast_install libpam-pwdfile apache2-utils
+    if ! measure "安装 libpam-pwdfile 与 htpasswd" apt_fast_install libpam-pwdfile apache2-utils; then
+        echo ">>> 从官方源拉取失败，切换临时镜像到腾讯并重试..."
+        switch_apt_to_tencent
+        if ! measure "[重试] 安装 libpam-pwdfile 与 htpasswd" apt_fast_install libpam-pwdfile apache2-utils; then
+            echo ">>> 镜像重试仍失败，建议稍后再试或检查网络。"
+            restore_apt_sources_if_needed
+            exit 1
+        fi
+        # 安装成功后可选择是否还原源，这里保持腾讯镜像以便后续安装更快；如需还原请解除下一行注释
+        # restore_apt_sources_if_needed
+    fi
     PASS_FILE="/etc/danted.passwd"
     # 生成/更新口令文件（不可群组读）
     touch "$PASS_FILE" && chmod 640 "$PASS_FILE"
