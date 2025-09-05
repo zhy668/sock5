@@ -144,18 +144,6 @@ check_status() {
     echo -e "${BOLD}${CYAN}================================================================${NC}"
     echo -e "${BOLD}${WHITE}                    >> 代理服务管理中心 <<                    ${NC}"
     echo -e "${BOLD}${WHITE}                HTTP & SOCKS5 代理一键管理工具                ${NC}"
-    # 确保存在一个可用的系统用户用于认证（若无则引导创建）
-    if ! id -u socksuser >/dev/null 2>&1; then
-        read -p "是否创建系统用户 socksuser 用于Dante认证? [Y/n]: " CREATE_USER
-        CREATE_USER=${CREATE_USER:-Y}
-        if [[ "$CREATE_USER" =~ ^[Yy]$ ]]; then
-            useradd -m -s /usr/sbin/nologin socksuser || true
-            echo "请为 socksuser 设置密码（用于SOCKS5认证，与SSH无关）"
-            passwd socksuser || true
-        else
-            echo "将使用你系统里已有用户进行认证（例如 root 或其他已有用户）。"
-        fi
-    fi
 
     echo -e "${BOLD}${CYAN}================================================================${NC}"
     echo ""
@@ -218,6 +206,22 @@ install_dante() {
     # 1. 获取用户输入的端口
     read -p "请输入SOCKS5代理要使用的端口 [默认 8087]: " PORT
     PORT=${PORT:-8087}
+    # 1.1 账户策略：socksuser 不存在则必须创建；也可选择使用已有系统用户
+    if ! id -u socksuser >/dev/null 2>&1; then
+        echo ">>> 未检测到 socksuser。用于SOCKS5认证的系统用户策略："
+        echo "    1) 创建 socksuser（推荐，最小权限，禁用登录shell）"
+        echo "    2) 使用已有用户（如 root 或你已有的普通用户）"
+        read -p "请选择 [1/2，默认 1]: " USER_CHOICE
+        USER_CHOICE=${USER_CHOICE:-1}
+        if [ "$USER_CHOICE" = "1" ]; then
+            useradd -m -s /usr/sbin/nologin socksuser || true
+            echo "请为 socksuser 设置密码（用于SOCKS5认证，与SSH无关）"
+            passwd socksuser || true
+        else
+            echo "你选择使用已有用户，请确保该用户存在并已设置密码。"
+        fi
+    fi
+
     echo
 
     # 2. 安装 dante-server
