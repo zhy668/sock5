@@ -68,14 +68,14 @@ check_status() {
     # 检查SOCKS5 (Dante)状态
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     if ! systemctl list-unit-files 2>/dev/null | grep -q 'danted.service'; then
-        echo -e "${CYAN}|${NC} ${BLUE}[SOCKS5]${NC} ${RED}[X] 未安装${NC}                                    ${CYAN}|${NC}"
+        echo -e " ${BLUE}[SOCKS5]${NC} ${RED}[X] 未安装${NC}"
     elif systemctl is-active --quiet danted 2>/dev/null; then
         local socks_port=$(grep -oP 'port = \K\d+' /etc/danted.conf 2>/dev/null || echo "未知")
-        echo -e "${CYAN}|${NC} ${BLUE}[SOCKS5]${NC} ${GREEN}[OK] 运行中${NC}                                   ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}    ${YELLOW}连接: ${WHITE}socks5://$public_ip:$socks_port${NC}              ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}    ${YELLOW}认证: ${WHITE}系统用户密码${NC}                                ${CYAN}|${NC}"
+        echo -e " ${BLUE}[SOCKS5]${NC} ${GREEN}[OK] 运行中${NC}"
+        echo -e "    ${YELLOW}连接: ${WHITE}socks5://$public_ip:$socks_port${NC}"
+        echo -e "    ${YELLOW}认证: ${WHITE}系统用户密码${NC}"
     else
-        echo -e "${CYAN}|${NC} ${BLUE}[SOCKS5]${NC} ${RED}[X] 已安装但未运行${NC}                           ${CYAN}|${NC}"
+        echo -e " ${BLUE}[SOCKS5]${NC} ${RED}[X] 已安装但未运行${NC}"
     fi
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
 
@@ -98,12 +98,12 @@ check_status() {
             fi
         fi
 
-        echo -e "${CYAN}|${NC} ${PURPLE}[HTTP]${NC}   ${GREEN}[OK] 运行中${NC}                                  ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}    ${YELLOW}连接: ${WHITE}http://$public_ip:$http_port${NC}                 ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}    ${YELLOW}用户: ${WHITE}$http_user${NC}                                    ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}    ${YELLOW}密码: ${WHITE}$http_pass${NC}                                      ${CYAN}|${NC}"
+        echo -e " ${PURPLE}[HTTP]${NC}   ${GREEN}[OK] 运行中${NC}"
+        echo -e "    ${YELLOW}连接: ${WHITE}http://$public_ip:$http_port${NC}"
+        echo -e "    ${YELLOW}用户: ${WHITE}$http_user${NC}"
+        echo -e "    ${YELLOW}密码: ${WHITE}$http_pass${NC}"
     else
-        echo -e "${CYAN}|${NC} ${PURPLE}[HTTP]${NC}   ${RED}[X] 未安装或未运行${NC}                         ${CYAN}|${NC}"
+        echo -e " ${PURPLE}[HTTP]${NC}   ${RED}[X] 未安装或未运行${NC}"
     fi
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     echo ""
@@ -500,20 +500,20 @@ while true; do
     echo -e "${BOLD}${YELLOW}>> 请选择您要执行的操作:${NC}"
     echo ""
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
-    echo -e "${CYAN}|${NC} ${BLUE}[SOCKS5 代理管理]${NC}                                        ${CYAN}|${NC}"
-    echo -e "${CYAN}|${NC}  ${WHITE}1)${NC} ${GREEN}安装 SOCKS5 (Dante) 代理${NC}                               ${CYAN}|${NC}"
-    echo -e "${CYAN}|${NC}  ${WHITE}2)${NC} ${RED}卸载 SOCKS5 (Dante) 代理${NC}                               ${CYAN}|${NC}"
+    echo -e " ${BLUE}[SOCKS5 代理管理]${NC}"
+    echo -e "  ${WHITE}1)${NC} ${GREEN}安装 SOCKS5 (Dante) 代理${NC}"
+    echo -e "  ${WHITE}2)${NC} ${RED}卸载 SOCKS5 (Dante) 代理${NC}"
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     echo ""
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
-    echo -e "${CYAN}|${NC} ${PURPLE}[HTTP 代理管理]${NC}                                           ${CYAN}|${NC}"
-    echo -e "${CYAN}|${NC}  ${WHITE}3)${NC} ${GREEN}安装 HTTP (Squid) 代理${NC}                                 ${CYAN}|${NC}"
-    echo -e "${CYAN}|${NC}  ${WHITE}4)${NC} ${RED}卸载 HTTP (Squid) 代理${NC}                                 ${CYAN}|${NC}"
+    echo -e " ${PURPLE}[HTTP 代理管理]${NC}"
+    echo -e "  ${WHITE}3)${NC} ${GREEN}安装 HTTP (Squid) 代理${NC}"
+    echo -e "  ${WHITE}4)${NC} ${RED}卸载 HTTP (Squid) 代理${NC}"
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     echo ""
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
-    echo -e "${CYAN}|${NC} ${YELLOW}[其他选项]${NC}                                                ${CYAN}|${NC}"
-    echo -e "${CYAN}|${NC}  ${WHITE}0)${NC} ${BOLD}退出脚本${NC}                                               ${CYAN}|${NC}"
+    echo -e " ${YELLOW}[其他选项]${NC}"
+    echo -e "  ${WHITE}0)${NC} ${BOLD}退出脚本${NC}"
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     echo
     read -p "请输入选项 [0-4]: " main_choice
