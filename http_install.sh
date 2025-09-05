@@ -45,8 +45,8 @@ check_status() {
 install_squid() {
     echo
     echo "===== 开始安装 HTTP (Squid) 代理 ====="
-    read -p "请输入HTTP代理端口 [默认: 8086]: " PORT
-    PORT=${PORT:-8086}
+    read -p "请输入HTTP代理端口 [默认: 8888]: " PORT
+    PORT=${PORT:-8888}
 
     read -p "请输入代理用户名 [默认: zhy668]: " USER
     USER=${USER:-zhy668}
