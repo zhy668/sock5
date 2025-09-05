@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# 确保脚本在发生错误时退出
+# Ensure script exits on error
 set -e
 
-# --- 全局函数定义 ---
+# --- Global Function Definitions ---
 
-# 颜色定义
+# Color definitions
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -16,7 +16,7 @@ WHITE='\033[1;37m'
 BOLD='\033[1m'
 NC='\033[0m' # No Color
 
-# 检查是否以root用户运行
+# Check if running as root user
 check_root() {
   if [[ $EUID -ne 0 ]]; then
     echo "Error: This script needs to be run with root privileges."
@@ -25,7 +25,7 @@ check_root() {
   fi
 }
 
-# 缓存公网IP以提高状态检查速度
+# Cache public IP to improve status check speed
 get_cached_public_ip() {
     local cache_file="/tmp/proxy_public_ip"
     local cache_timeout=300  # 5 minutes cache
@@ -52,7 +52,7 @@ get_cached_public_ip() {
     echo "$new_ip"
 }
 
-# 检查并显示当前服务状态
+# Check and display current service status
 check_status() {
     clear
     echo -e "${BOLD}${CYAN}================================================================${NC}"
@@ -71,7 +71,7 @@ check_status() {
         echo -e "${CYAN}|${NC} ${BLUE}[SOCKS5]${NC} ${RED}[X] Not Installed${NC}                                    ${CYAN}|${NC}"
     elif systemctl is-active --quiet danted 2>/dev/null; then
         local socks_port=$(grep -oP 'port = \K\d+' /etc/danted.conf 2>/dev/null || echo "Unknown")
-        echo -e "${CYAN}|${NC} ${BLUE}[SOCKS5]${NC} ${GREEN}[√] Running${NC}                                   ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC} ${BLUE}[SOCKS5]${NC} ${GREEN}[OK] Running${NC}                                   ${CYAN}|${NC}"
         echo -e "${CYAN}|${NC}    ${YELLOW}Connect: ${WHITE}socks5://$public_ip:$socks_port${NC}              ${CYAN}|${NC}"
         echo -e "${CYAN}|${NC}    ${YELLOW}Auth: ${WHITE}System User Password${NC}                                ${CYAN}|${NC}"
     else
@@ -96,7 +96,7 @@ check_status() {
             fi
         fi
 
-        echo -e "${CYAN}|${NC} ${PURPLE}[HTTP]${NC}   ${GREEN}[√] Running${NC}                                  ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC} ${PURPLE}[HTTP]${NC}   ${GREEN}[OK] Running${NC}                                  ${CYAN}|${NC}"
         echo -e "${CYAN}|${NC}    ${YELLOW}Connect: ${WHITE}http://$public_ip:$http_port${NC}                 ${CYAN}|${NC}"
         echo -e "${CYAN}|${NC}    ${YELLOW}User: ${WHITE}$http_user${NC}                                    ${CYAN}|${NC}"
         echo -e "${CYAN}|${NC}    ${YELLOW}Pass: ${WHITE}$http_pass${NC}                                      ${CYAN}|${NC}"
@@ -107,7 +107,7 @@ check_status() {
     echo ""
 }
 
-# 快速详细状态检查
+# Quick detailed status check
 quick_detailed_status() {
     clear
     echo -e "${BOLD}${CYAN}================================================================${NC}"
@@ -122,68 +122,69 @@ quick_detailed_status() {
     echo -e "   ${YELLOW}System:${NC}   ${WHITE}$(uname -s) $(uname -r)${NC}"
     echo ""
 
-    # 检查SOCKS5状态
-    echo "┌─ � SOCKS5 (Dante) 详细状态 ─────────────────────────────────┐"
+    # Check SOCKS5 status
+    echo -e "${BOLD}${BLUE}[SOCKS5 Detailed Status]${NC}"
+    echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     if ! systemctl list-unit-files 2>/dev/null | grep -q 'danted.service'; then
-        echo "│   状态: ❌ 未安装                                           │"
-        echo "│   建议: 选择菜单选项 1 进行安装                             │"
+        echo -e "${CYAN}|${NC}   ${YELLOW}Status:${NC} ${RED}[X] Not Installed${NC}                                           ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}Suggest:${NC} ${WHITE}Select menu option 1 to install${NC}                             ${CYAN}|${NC}"
     elif systemctl is-active --quiet danted 2>/dev/null; then
-        local socks_port=$(grep -oP 'port = \K\d+' /etc/danted.conf 2>/dev/null || echo "未知")
-        echo "│   状态: ✅ 运行中                                           │"
-        echo "│   端口: $socks_port                                         │"
-        echo "│   连接: socks5://$public_ip:$socks_port                     │"
-        echo "│   认证: 系统用户密码                                       │"
-        echo "│   配置: /etc/danted.conf                                   │"
-        echo "│   日志: journalctl -u danted --no-pager -l                │"
+        local socks_port=$(grep -oP 'port = \K\d+' /etc/danted.conf 2>/dev/null || echo "Unknown")
+        echo -e "${CYAN}|${NC}   ${YELLOW}Status:${NC} ${GREEN}[OK] Running${NC}                                           ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}Port:${NC} ${WHITE}$socks_port${NC}                                         ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}Connect:${NC} ${WHITE}socks5://$public_ip:$socks_port${NC}                     ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}Auth:${NC} ${WHITE}System User Password${NC}                                       ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}Config:${NC} ${WHITE}/etc/danted.conf${NC}                                   ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}Log:${NC} ${WHITE}journalctl -u danted --no-pager -l${NC}                ${CYAN}|${NC}"
     else
-        echo "│   状态: ❌ 已安装但未运行                                   │"
-        echo "│   建议: systemctl start danted                            │"
-        echo "│   日志: journalctl -u danted --no-pager -l                │"
+        echo -e "${CYAN}|${NC}   ${YELLOW}Status:${NC} ${RED}[X] Installed but Not Running${NC}                                   ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}Suggest:${NC} ${WHITE}systemctl start danted${NC}                            ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}Log:${NC} ${WHITE}journalctl -u danted --no-pager -l${NC}                ${CYAN}|${NC}"
     fi
-    echo "└─────────────────────────────────────────────────────────────┘"
+    echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     echo ""
 
-    # 检查HTTP状态
-    echo "┌─ � HTTP (Squid) 详细状态 ──────────────────────────────────┐"
+    # Check HTTP status
+    echo -e "${BOLD}${PURPLE}[HTTP Detailed Status]${NC}"
+    echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     if ! systemctl list-unit-files 2>/dev/null | grep -q 'squid.service'; then
-        echo "│   状态: ❌ 未安装                                           │"
-        echo "│   建议: 选择菜单选项 3 进行安装                             │"
+        echo -e "${CYAN}|${NC}   ${YELLOW}Status:${NC} ${RED}[X] Not Installed${NC}                                           ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}Suggest:${NC} ${WHITE}Select menu option 3 to install${NC}                             ${CYAN}|${NC}"
     elif systemctl is-active --quiet squid 2>/dev/null; then
-        local http_port=$(grep -oP 'http_port\s+\K\d+' /etc/squid/squid.conf 2>/dev/null || echo "未知")
-        local http_user="未知"
-        local http_pass="未知"
+        local http_port=$(grep -oP 'http_port\s+\K\d+' /etc/squid/squid.conf 2>/dev/null || echo "Unknown")
+        local http_user="Unknown"
+        local http_pass="Unknown"
 
         if [ -f "/etc/squid/passwd" ]; then
             http_user=$(cut -d: -f1 /etc/squid/passwd 2>/dev/null | head -1)
             if [ -f "/tmp/squid_password" ]; then
                 http_pass=$(cat /tmp/squid_password 2>/dev/null)
             else
-                http_pass="[查看安装日志]"
+                http_pass="[Check Install Log]"
             fi
         fi
 
-        echo "│   状态: ✅ 运行中                                           │"
-        echo "│   端口: $http_port                                          │"
-        echo "│   连接: http://$public_ip:$http_port                        │"
-        echo "│   用户: $http_user                                          │"
-        echo "│   密码: $http_pass                                          │"
-        echo "│   配置: /etc/squid/squid.conf                              │"
-        echo "│   认证: /etc/squid/passwd                                  │"
-        echo "│   日志: journalctl -u squid --no-pager -l                 │"
+        echo -e "${CYAN}|${NC}   ${YELLOW}Status:${NC} ${GREEN}[OK] Running${NC}                                           ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}Port:${NC} ${WHITE}$http_port${NC}                                          ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}Connect:${NC} ${WHITE}http://$public_ip:$http_port${NC}                        ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}User:${NC} ${WHITE}$http_user${NC}                                          ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}Pass:${NC} ${WHITE}$http_pass${NC}                                          ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}Config:${NC} ${WHITE}/etc/squid/squid.conf${NC}                              ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}Auth:${NC} ${WHITE}/etc/squid/passwd${NC}                                  ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}Log:${NC} ${WHITE}journalctl -u squid --no-pager -l${NC}                 ${CYAN}|${NC}"
     else
-        echo "│   状态: ❌ 已安装但未运行                                   │"
-        echo "│   建议: systemctl start squid                             │"
-        echo "│   日志: journalctl -u squid --no-pager -l                 │"
+        echo -e "${CYAN}|${NC}   ${YELLOW}Status:${NC} ${RED}[X] Installed but Not Running${NC}                                   ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}Suggest:${NC} ${WHITE}systemctl start squid${NC}                             ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}Log:${NC} ${WHITE}journalctl -u squid --no-pager -l${NC}                 ${CYAN}|${NC}"
     fi
-    echo "└─────────────────────────────────────────────────────────────┘"
+    echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     echo ""
-
     echo -e "${BOLD}${GREEN}================================================================${NC}"
     echo -e "${BOLD}${WHITE}                    >> Detailed Status Check Complete! <<                   ${NC}"
     echo -e "${BOLD}${GREEN}================================================================${NC}"
 }
 
-# 安装和配置 Dante
+# Install and configure Dante
 install_dante() {
     echo
     echo "===== Starting SOCKS5 (Dante) Proxy Installation ====="
@@ -236,6 +237,7 @@ client pass {
     from: 0.0.0.0/0 to: 0.0.0.0/0
     log: error connect disconnect
 }
+
 pass {
     from: 0.0.0.0/0 to: 0.0.0.0/0
     log: error connect disconnect
@@ -310,26 +312,26 @@ EOF
     fi
 }
 
-# 卸载 Dante
+# Uninstall Dante
 uninstall_dante() {
     echo
-    read -p "您确定要卸载 SOCKS5 (Dante) 代理吗？这将删除所有配置。[y/N]: " choice
+    read -p "Are you sure you want to uninstall SOCKS5 (Dante) proxy? This will delete all configurations. [y/N]: " choice
     case "$choice" in
       y|Y )
-        echo "===== 开始卸载 SOCKS5 (Dante) 代理 ====="
-        
+        echo "===== Starting SOCKS5 (Dante) Proxy Uninstallation ====="
+
         local port=$(grep -oP 'port = \K\d+' /etc/danted.conf || echo "")
-        
-        # 停止并禁用服务
+
+        # Stop and disable service
         if systemctl list-unit-files | grep -q 'danted.service'; then
-            echo ">>> [1/4] 正在停止并禁用 danted 服务..."
+            echo ">>> [1/4] Stopping and disabling danted service..."
             systemctl stop danted || true
             systemctl disable danted || true
         fi
 
-        # 新增：关闭防火墙端口
+        # Close firewall port
         if [ ! -z "$port" ]; then
-            echo ">>> [2/4] 正在关闭防火墙端口 $port..."
+            echo ">>> [2/4] Closing firewall port $port..."
             if command -v ufw >/dev/null 2>&1; then
                 ufw delete allow $port/tcp
             elif command -v firewall-cmd >/dev/null 2>&1; then
@@ -338,76 +340,76 @@ uninstall_dante() {
             fi
         fi
 
-        # 卸载软件包
-        echo ">>> [3/4] 正在卸载 dante-server 软件包..."
+        # Uninstall package
+        echo ">>> [3/4] Uninstalling dante-server package..."
         if [ -x "$(command -v apt-get)" ]; then
             apt-get purge -y dante-server > /dev/null
         elif [ -x "$(command -v yum)" ]; then
             yum remove -y dante-server > /dev/null
         fi
-        
-        # 清理残留文件
-        echo ">>> [4/4] 正在清理残留配置文件..."
+
+        # Clean up remaining files
+        echo ">>> [4/4] Cleaning up remaining configuration files..."
         rm -f /etc/danted.conf*
         rm -f /etc/pam.d/danted
-        
+
         echo
-        echo "✅ SOCKS5 (Dante) 代理已成功卸载。"
+        echo "SOCKS5 (Dante) proxy has been successfully uninstalled."
         ;;
       * )
-        echo "操作已取消。"
+        echo "Operation cancelled."
         ;;
     esac
 }
 
-# 安装并配置Squid HTTP代理
+# Install and configure Squid HTTP proxy
 install_squid() {
     echo
-    echo "===== 开始安装 HTTP (Squid) 代理 ====="
-    read -p "请输入HTTP代理端口 [默认: 8888]: " PORT
+    echo "===== Starting HTTP (Squid) Proxy Installation ====="
+    read -p "Enter HTTP proxy port [default: 8888]: " PORT
     PORT=${PORT:-8888}
 
-    read -p "请输入代理用户名 [默认: user]: " USER
+    read -p "Enter proxy username [default: user]: " USER
     USER=${USER:-user}
 
-    read -p "请输入代理密码 [默认: password123]: " PASS
+    read -p "Enter proxy password [default: password123]: " PASS
     PASS=${PASS:-password123}
 
     echo
-    echo ">>> [1/4] 正在安装 Squid 和认证工具..."
+    echo ">>> [1/4] Installing Squid and authentication tools..."
     if [ -x "$(command -v apt-get)" ]; then
         apt-get update > /dev/null 2>&1
         apt-get install -y squid apache2-utils
     elif [ -x "$(command -v yum)" ]; then
         yum install -y squid httpd-tools
     else
-        echo "错误：不支持的系统。仅支持 Debian/Ubuntu 和 CentOS/RHEL。"
+        echo "Error: Unsupported system. Only supports Debian/Ubuntu and CentOS/RHEL."
         exit 1
     fi
 
-    echo ">>> [2/4] 正在配置 Squid..."
-    # 备份原配置
+    echo ">>> [2/4] Configuring Squid..."
+    # Backup original configuration
     cp /etc/squid/squid.conf /etc/squid/squid.conf.backup
 
-    # 创建简化配置
+    # Create simplified configuration
     cat > /etc/squid/squid.conf << EOF
-# Squid HTTP代理配置文件
+# Squid HTTP proxy configuration file
 http_port $PORT
 
-# 访问控制
+# Access control
 acl localnet src 0.0.0.0/0
 acl SSL_ports port 443
 acl Safe_ports port 80 21 443 70 210 1025-65535 280 488 591 777
 acl CONNECT method CONNECT
 
-# 基本认证配置
+# Basic authentication configuration
 auth_param basic program /usr/lib/squid3/basic_ncsa_auth /etc/squid/passwd
 auth_param basic children 5
 auth_param basic realm Squid proxy-caching web server
 auth_param basic credentialsttl 2 hours
 acl authenticated proxy_auth REQUIRED
 
-# 访问规则
+# Access rules
 http_access deny !Safe_ports
 http_access deny CONNECT !SSL_ports
 http_access allow localhost manager
@@ -417,39 +419,39 @@ http_access allow localnet
 http_access allow localhost
 http_access deny all
 
-# 缓存配置
+# Cache configuration
 cache_dir ufs /var/spool/squid 100 16 256
 coredump_dir /var/spool/squid
 
-# 日志配置
+# Log configuration
 access_log /var/log/squid/access.log squid
 cache_log /var/log/squid/cache.log
 
-# 其他配置
+# Other configuration
 refresh_pattern ^ftp: 1440 20% 10080
 refresh_pattern ^gopher: 1440 0% 1440
 refresh_pattern -i (/cgi-bin/|\?) 0 0% 0
 refresh_pattern . 0 20% 4320
 
-# 禁用Via头部以提高匿名性
+# Disable Via header to improve anonymity
 via off
 forwarded_for off
 EOF
 
-    echo ">>> [3/4] 正在创建用户认证..."
+    echo ">>> [3/4] Creating user authentication..."
     htpasswd -cb /etc/squid/passwd "$USER" "$PASS"
     chown proxy:proxy /etc/squid/passwd
     chmod 640 /etc/squid/passwd
 
-    # 保存密码到临时文件供状态检查使用
+    # Save password to temp file for status check use
     echo "$PASS" > /tmp/squid_password
     chmod 600 /tmp/squid_password
 
-    echo ">>> [4/4] 正在启动服务..."
+    echo ">>> [4/4] Starting service..."
     systemctl restart squid
     systemctl enable squid
 
-    # 配置防火墙
+    # Configure firewall
     if command -v ufw >/dev/null 2>&1; then
         ufw allow $PORT/tcp
     elif command -v firewall-cmd >/dev/null 2>&1; then
@@ -457,11 +459,11 @@ EOF
         firewall-cmd --reload
     fi
 
-    # 检查服务状态
-    echo ">>> 正在检查 Squid 服务状态..."
+    # Check service status
+    echo ">>> Checking Squid service status..."
     sleep 1
 
-    # 重试机制检查服务状态
+    # Retry mechanism to check service status
     local retry_count=0
     local max_retries=3
     local service_running=false
@@ -502,26 +504,26 @@ EOF
     fi
 }
 
-# 卸载Squid HTTP代理
+# Uninstall Squid HTTP proxy
 uninstall_squid() {
     echo
-    read -p "您确定要卸载 HTTP (Squid) 代理吗？这将删除所有配置。[y/N]: " choice
+    read -p "Are you sure you want to uninstall HTTP (Squid) proxy? This will delete all configurations. [y/N]: " choice
     case "$choice" in
       y|Y )
-        echo "===== 开始卸载 HTTP (Squid) 代理 ====="
+        echo "===== Starting HTTP (Squid) Proxy Uninstallation ====="
 
         local port=$(grep -oP 'http_port\s+\K\d+' /etc/squid/squid.conf || echo "")
 
-        # 停止并禁用服务
+        # Stop and disable service
         if systemctl list-unit-files | grep -q 'squid.service'; then
-            echo ">>> [1/4] 正在停止并禁用 squid 服务..."
+            echo ">>> [1/4] Stopping and disabling squid service..."
             systemctl stop squid || true
             systemctl disable squid || true
         fi
 
-        # 关闭防火墙端口
+        # Close firewall port
         if [ ! -z "$port" ]; then
-            echo ">>> [2/4] 正在关闭防火墙端口 $port..."
+            echo ">>> [2/4] Closing firewall port $port..."
             if command -v ufw >/dev/null 2>&1; then
                 ufw delete allow $port/tcp || true
             elif command -v firewall-cmd >/dev/null 2>&1; then
@@ -530,37 +532,37 @@ uninstall_squid() {
             fi
         fi
 
-        # 卸载软件包
-        echo ">>> [3/4] 正在卸载 squid..."
+        # Uninstall package
+        echo ">>> [3/4] Uninstalling squid..."
         if [ -x "$(command -v apt-get)" ]; then
             apt-get remove --purge -y squid
         elif [ -x "$(command -v yum)" ]; then
             yum remove -y squid
         fi
 
-        # 清理配置文件
-        echo ">>> [4/4] 正在清理配置文件..."
+        # Clean up configuration files
+        echo ">>> [4/4] Cleaning up configuration files..."
         rm -rf /etc/squid
         rm -rf /var/spool/squid
         rm -rf /var/log/squid
 
         echo
         echo "============================================"
-        echo " HTTP (Squid) 代理已成功卸载！"
+        echo " HTTP (Squid) proxy has been successfully uninstalled!"
         echo "============================================"
         ;;
       * )
-        echo "操作已取消。"
+        echo "Operation cancelled."
         ;;
     esac
 }
 
-# --- 主逻辑 ---
+# --- Main Logic ---
 
-# 脚本开始时，先检查root权限
+# Check root privileges at script start
 check_root
 
-# 主菜单循环
+# Main menu loop
 while true; do
     check_status
     echo -e "${BOLD}${YELLOW}>> Please select an operation:${NC}"
