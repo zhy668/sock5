@@ -68,13 +68,23 @@ apt_smart_update_if_needed() {
     echo ">>> apt 索引较新(<=${max_age}s)，跳过 apt-get update"
     return 0
   fi
+
+  echo ">>> 更新软件包索引..."
   apt_wait_for_locks 60
+
+  # 简单优化：更短超时，更多重试，忽略错误继续
   DEBIAN_FRONTEND=noninteractive \
   apt-get -o Acquire::ForceIPv4=true \
-          -o Acquire::Retries=3 \
-          -o Acquire::http::Timeout=10 \
+          -o Acquire::Retries=5 \
+          -o Acquire::http::Timeout=5 \
+          -o Acquire::ftp::Timeout=5 \
           -o Acquire::Languages=none \
-          update -y > /dev/null 2>&1 || true
+          -o APT::Get::Fix-Missing=true \
+          update -y >/dev/null 2>&1 || {
+    echo ">>> 软件包索引更新遇到问题，但继续安装..."
+    return 0
+  }
+  echo ">>> 软件包索引更新完成"
 }
 
 # 快速安装（APT）：强制IPv4、重试、超时、无推荐包
@@ -82,20 +92,29 @@ apt_fast_install() {
   apt_wait_for_locks 60
   DEBIAN_FRONTEND=noninteractive \
   apt-get -o Acquire::ForceIPv4=true \
-          -o Acquire::Retries=3 \
-          -o Acquire::http::Timeout=10 \
+          -o Acquire::Retries=5 \
+          -o Acquire::http::Timeout=8 \
+          -o Acquire::ftp::Timeout=8 \
           -o Dpkg::Use-Pty=0 \
           -o Acquire::Languages=none \
+          -o APT::Get::Fix-Missing=true \
           install -y --no-install-recommends "$@"
 }
 
 # YUM 加速：建立缓存与快速安装
 yum_fast_makecache() {
-  yum -y makecache fast >/dev/null 2>&1 || yum -y makecache >/dev/null 2>&1 || true
+  echo ">>> 更新YUM缓存..."
+  # 简单优化：更短超时，忽略错误继续
+  yum -y --setopt=timeout=5 --setopt=retries=3 makecache fast >/dev/null 2>&1 || \
+  yum -y --setopt=timeout=5 --setopt=retries=3 makecache >/dev/null 2>&1 || {
+    echo ">>> YUM缓存更新遇到问题，但继续安装..."
+    return 0
+  }
+  echo ">>> YUM缓存更新完成"
 }
 
 yum_fast_install() {
-  yum -y --setopt=timeout=10 --setopt=retries=3 install "$@"
+  yum -y --setopt=timeout=8 --setopt=retries=5 --setopt=skip_missing_names_on_install=False install "$@"
 }
 
 # 计时器：打印命令耗时（秒）
