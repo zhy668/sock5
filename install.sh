@@ -150,7 +150,7 @@ check_status() {
     # 获取公网IP（使用缓存机制，避免重复网络请求）
     local public_ip=$(get_cached_public_ip)
 
-    # 检查SOCKS5 (Dante)状态
+    # 检查SOCKS5状态
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     if ! systemctl list-unit-files 2>/dev/null | grep -q 'danted.service'; then
         echo -e " ${BLUE}[SOCKS5]${NC} ${RED}[X] 未安装${NC}"
@@ -164,7 +164,7 @@ check_status() {
     fi
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
 
-    # 检查HTTP (Squid)状态
+    # 检查HTTP状态
     if systemctl is-active --quiet squid 2>/dev/null; then
         local http_port=$(grep -oP 'http_port\s+\K\d+' /etc/squid/squid.conf 2>/dev/null || echo "未知")
         local http_user="未知"
@@ -199,11 +199,21 @@ check_status() {
 # 安装和配置 Dante
 install_dante() {
     echo
-    echo "===== 开始安装 SOCKS5 (Dante) 代理 ====="
+    echo "===== 开始安装 SOCKS5 代理 ====="
 
-    # 1. 获取用户输入的端口
+    # 1. 获取用户输入的端口/账号
     read -p "请输入SOCKS5代理要使用的端口 [默认 8087]: " PORT
     PORT=${PORT:-8087}
+    read -p "请输入SOCKS5用户名 [默认 socksuser]: " SOCKS_USER
+    SOCKS_USER=${SOCKS_USER:-socksuser}
+    read -p "请输入SOCKS5密码 [默认随机生成]: " SOCKS_PASS
+    if [ -z "$SOCKS_PASS" ]; then
+        if command -v openssl >/dev/null 2>&1; then
+            SOCKS_PASS=$(openssl rand -base64 12 | tr -d '=+/\n' | cut -c1-16)
+        else
+            SOCKS_PASS=$(head -c 32 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 16)
+        fi
+    fi
     echo
 
     # 2. 安装 dante-server
@@ -222,11 +232,22 @@ install_dante() {
 
     # 3. 配置PAM认证
     echo ">>> [2/6] 正在配置PAM认证模块..."
+    # B方案：使用 libpam-pwdfile 与独立口令文件
+    apt_smart_update_if_needed
+    measure "安装 libpam-pwdfile 与 htpasswd" apt_fast_install libpam-pwdfile apache2-utils
+    PASS_FILE="/etc/danted.passwd"
+    # 生成/更新口令文件（不可群组读）
+    touch "$PASS_FILE" && chmod 640 "$PASS_FILE"
+    if ! grep -q "^$SOCKS_USER:" "$PASS_FILE" 2>/dev/null; then
+        htpasswd -bBC 10 "$PASS_FILE" "$SOCKS_USER" "$SOCKS_PASS" >/dev/null
+    else
+        htpasswd -bB  "$PASS_FILE" "$SOCKS_USER" "$SOCKS_PASS" >/dev/null
+    fi
     PAM_CONF="/etc/pam.d/danted"
-    tee $PAM_CONF > /dev/null <<EOF
+    tee "$PAM_CONF" > /dev/null <<EOF
 #%PAM-1.0
-auth       required   pam_unix.so
-account    required   pam_unix.so
+auth    required pam_pwdfile.so pwdfile=$PASS_FILE
+account required pam_permit.so
 EOF
     echo ">>> PAM配置完成。"
 
@@ -242,11 +263,19 @@ logoutput: syslog
 internal: 0.0.0.0 port = $PORT
 external: $IFACE
 
+# SOCKS5 方法：仅使用 username（PAM）
 method: username
 user.notprivileged: nobody
 
 client pass {
     from: 0.0.0.0/0 to: 0.0.0.0/0
+    log: error connect disconnect
+}
+
+# 认证与访问控制
+socks pass {
+    from: 0.0.0.0/0 to: 0.0.0.0/0
+    command: bind connect udpassociate
     log: error connect disconnect
 }
 
@@ -308,7 +337,7 @@ EOF
         echo -e "${BOLD}${WHITE}                  >> SOCKS5 代理安装成功！ <<                ${NC}"
         echo -e "${BOLD}${GREEN}================================================================${NC}"
         echo -e "${BOLD}${WHITE}  连接信息: socks5://$PUBLIC_IP:$PORT                     ${NC}"
-        echo -e "${BOLD}${WHITE}  认证方式: 系统用户密码 (如 root)                        ${NC}"
+        echo -e "${BOLD}${WHITE}  认证方式: 独立口令文件（/etc/danted.passwd）           ${NC}"
         echo -e "${BOLD}${WHITE}  服务状态: 运行中                                         ${NC}"
         echo -e "${BOLD}${GREEN}================================================================${NC}"
     else
@@ -327,10 +356,10 @@ EOF
 # Uninstall Dante
 uninstall_dante() {
     echo
-    read -p "确定是否卸载 SOCKS5 (Dante) 代理? 这会删除所有相关配置.  [y/N]: " choice
+    read -p "确定是否卸载 SOCKS5 代理? 这会删除所有相关配置.  [y/N]: " choice
     case "$choice" in
       y|Y )
-        echo "===== 开始卸载 SOCKS5 (Dante) 代理 ====="
+        echo "===== 开始卸载 SOCKS5 代理 ====="
 
         local port=$(grep -oP 'port = \K\d+' /etc/danted.conf || echo "")
 
@@ -525,10 +554,10 @@ EOF
 # 卸载 Squid HTTP 代理
 uninstall_squid() {
     echo
-    read -p "确定是否卸载 HTTP (Squid) 代理? 这会删除所有相关配置. [y/N]: " choice
+    read -p "确定是否卸载 HTTP 代理? 这会删除所有相关配置. [y/N]: " choice
     case "$choice" in
       y|Y )
-        echo "===== 开始卸载 HTTP (Squid) 代理 ====="
+        echo "===== 开始卸载 HTTP 代理 ====="
 
         local port=$(grep -oP 'http_port\s+\K\d+' /etc/squid/squid.conf || echo "")
 
@@ -539,9 +568,9 @@ uninstall_squid() {
             systemctl disable squid || true
         fi
 
-        # Close firewall port
+        # 关闭防火墙端口
         if [ ! -z "$port" ]; then
-            echo ">>> [2/4] Closing firewall port $port..."
+            echo ">>> [2/4] 关闭防火墙端口 $port..."
             if command -v ufw >/dev/null 2>&1; then
                 ufw delete allow $port/tcp || true
             elif command -v firewall-cmd >/dev/null 2>&1; then
@@ -550,15 +579,15 @@ uninstall_squid() {
             fi
         fi
 
-        # Uninstall package
-        echo ">>> [3/4] Uninstalling squid..."
+        # 卸载软件包
+        echo ">>> [3/4] 卸载 squid 软件包..."
         if [ -x "$(command -v apt-get)" ]; then
             apt-get remove --purge -y squid
         elif [ -x "$(command -v yum)" ]; then
             yum remove -y squid
         fi
 
-        # Clean up configuration files
+        # 清理残留文件
         echo ">>> [4/4] 清理配置文件..."
         rm -rf /etc/squid
         rm -rf /var/spool/squid
@@ -566,7 +595,7 @@ uninstall_squid() {
 
         echo
         echo "============================================"
-        echo " HTTP (Squid) proxy 成功卸载!"
+        echo " HTTP proxy 成功卸载!"
         echo "============================================"
         ;;
       * )
@@ -587,14 +616,14 @@ while true; do
     echo ""
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     echo -e " ${BLUE}[SOCKS5 代理管理]${NC}"
-    echo -e "  ${WHITE}1)${NC} ${GREEN}安装 SOCKS5 (Dante) 代理${NC}"
-    echo -e "  ${WHITE}2)${NC} ${RED}卸载 SOCKS5 (Dante) 代理${NC}"
+    echo -e "  ${WHITE}1)${NC} ${GREEN}安装 SOCKS5 代理${NC}"
+    echo -e "  ${WHITE}2)${NC} ${RED}卸载 SOCKS5 代理${NC}"
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     echo ""
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     echo -e "${NC} ${BLUE}[HTTP 代理管理]${NC}                                          ${NC}"
-    echo -e "${NC}  ${WHITE}3)${NC} ${GREEN}安装 HTTP (Squid) 代理${NC}                                 ${NC}"
-    echo -e "${NC}  ${WHITE}4)${NC} ${RED}卸载 HTTP (Squid) 代理${NC}                                 ${NC}"
+    echo -e "${NC}  ${WHITE}3)${NC} ${GREEN}安装 HTTP 代理${NC}                                 ${NC}"
+    echo -e "${NC}  ${WHITE}4)${NC} ${RED}卸载 HTTP 代理${NC}                                 ${NC}"
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     echo ""
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
