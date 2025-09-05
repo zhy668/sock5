@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Ensure script exits on error
+# 确保脚本在发生错误时退出
 set -e
 
-# --- Global Function Definitions ---
+# --- 全局函数定义 ---
 
-# Color definitions
+# 颜色定义
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -16,23 +16,23 @@ WHITE='\033[1;37m'
 BOLD='\033[1m'
 NC='\033[0m' # No Color
 
-# Check if running as root user
+# 检查是否以root用户运行
 check_root() {
   if [[ $EUID -ne 0 ]]; then
-    echo "Error: This script needs to be run with root privileges."
-    echo "Please try using 'sudo ./your_script_name.sh' to run."
+    echo "错误：本脚本需要以 root 权限运行。"
+    echo "请尝试使用 'sudo ./your_script_name.sh' 来运行。"
     exit 1
   fi
 }
 
-# Cache public IP to improve status check speed
+# 缓存公网IP以提高状态检查速度
 get_cached_public_ip() {
     local cache_file="/tmp/proxy_public_ip"
-    local cache_timeout=300  # 5 minutes cache
+    local cache_timeout=300  # 5分钟缓存
     local cached_ip=""
     local cache_age=0
 
-    # Check if cache file exists and not expired
+    # 检查缓存文件是否存在且未过期
     if [ -f "$cache_file" ]; then
         cache_age=$(($(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || echo 0)))
         if [ $cache_age -lt $cache_timeout ]; then
@@ -40,162 +40,162 @@ get_cached_public_ip() {
         fi
     fi
 
-    # If cache is valid, return directly
-    if [ ! -z "$cached_ip" ] && [ "$cached_ip" != "FAILED" ]; then
+    # 如果缓存有效，直接返回
+    if [ ! -z "$cached_ip" ] && [ "$cached_ip" != "获取失败" ]; then
         echo "$cached_ip"
         return
     fi
 
-    # Get new IP and cache it
-    local new_ip=$(timeout 3 curl -s http://ipv4.icanhazip.com/ 2>/dev/null || timeout 3 curl -s http://checkip.amazonaws.com/ 2>/dev/null || echo "FAILED")
+    # 获取新的IP并缓存
+    local new_ip=$(timeout 3 curl -s http://ipv4.icanhazip.com/ 2>/dev/null || timeout 3 curl -s http://checkip.amazonaws.com/ 2>/dev/null || echo "获取失败")
     echo "$new_ip" > "$cache_file" 2>/dev/null
     echo "$new_ip"
 }
 
-# Check and display current service status
+# 检查并显示当前服务状态
 check_status() {
     clear
     echo -e "${BOLD}${CYAN}================================================================${NC}"
-    echo -e "${BOLD}${WHITE}                    >> Proxy Service Center <<                    ${NC}"
-    echo -e "${BOLD}${WHITE}                HTTP & SOCKS5 Proxy Management Tool                ${NC}"
+    echo -e "${BOLD}${WHITE}                    >> 代理服务管理中心 <<                    ${NC}"
+    echo -e "${BOLD}${WHITE}                HTTP & SOCKS5 代理一键管理工具                ${NC}"
     echo -e "${BOLD}${CYAN}================================================================${NC}"
     echo ""
-    echo -e "${BOLD}${YELLOW}[Status Check] Current Service Status:${NC}"
+    echo -e "${BOLD}${YELLOW}[状态检查] 当前服务状态:${NC}"
 
-    # Get public IP (using cache mechanism to avoid repeated network requests)
+    # 获取公网IP（使用缓存机制，避免重复网络请求）
     local public_ip=$(get_cached_public_ip)
 
-    # Check SOCKS5 (Dante) status
+    # 检查SOCKS5 (Dante)状态
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     if ! systemctl list-unit-files 2>/dev/null | grep -q 'danted.service'; then
-        echo -e "${CYAN}|${NC} ${BLUE}[SOCKS5]${NC} ${RED}[X] Not Installed${NC}                                    ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC} ${BLUE}[SOCKS5]${NC} ${RED}[X] 未安装${NC}                                    ${CYAN}|${NC}"
     elif systemctl is-active --quiet danted 2>/dev/null; then
-        local socks_port=$(grep -oP 'port = \K\d+' /etc/danted.conf 2>/dev/null || echo "Unknown")
-        echo -e "${CYAN}|${NC} ${BLUE}[SOCKS5]${NC} ${GREEN}[OK] Running${NC}                                   ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}    ${YELLOW}Connect: ${WHITE}socks5://$public_ip:$socks_port${NC}              ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}    ${YELLOW}Auth: ${WHITE}System User Password${NC}                                ${CYAN}|${NC}"
+        local socks_port=$(grep -oP 'port = \K\d+' /etc/danted.conf 2>/dev/null || echo "未知")
+        echo -e "${CYAN}|${NC} ${BLUE}[SOCKS5]${NC} ${GREEN}[OK] 运行中${NC}                                   ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}    ${YELLOW}连接: ${WHITE}socks5://$public_ip:$socks_port${NC}              ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}    ${YELLOW}认证: ${WHITE}系统用户密码${NC}                                ${CYAN}|${NC}"
     else
-        echo -e "${CYAN}|${NC} ${BLUE}[SOCKS5]${NC} ${RED}[X] Installed but Not Running${NC}                           ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC} ${BLUE}[SOCKS5]${NC} ${RED}[X] 已安装但未运行${NC}                           ${CYAN}|${NC}"
     fi
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
 
-    # Check HTTP (Squid) status
+    # 检查HTTP (Squid)状态
     if systemctl is-active --quiet squid 2>/dev/null; then
-        local http_port=$(grep -oP 'http_port\s+\K\d+' /etc/squid/squid.conf 2>/dev/null || echo "Unknown")
-        local http_user="Unknown"
-        local http_pass="Unknown"
+        local http_port=$(grep -oP 'http_port\s+\K\d+' /etc/squid/squid.conf 2>/dev/null || echo "未知")
+        local http_user="未知"
+        local http_pass="未知"
 
-        # Try to get username and password from auth file
+        # 尝试从认证文件中获取用户名和密码
         if [ -f "/etc/squid/passwd" ]; then
             http_user=$(cut -d: -f1 /etc/squid/passwd 2>/dev/null | head -1)
-            # Get password from installation temp file
+            # 从安装时的临时文件或配置中获取密码
             if [ -f "/tmp/squid_password" ]; then
                 http_pass=$(cat /tmp/squid_password 2>/dev/null)
             else
-                http_pass="[Check Install Log]"
+                http_pass="[请查看安装日志]"
             fi
         fi
 
-        echo -e "${CYAN}|${NC} ${PURPLE}[HTTP]${NC}   ${GREEN}[OK] Running${NC}                                  ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}    ${YELLOW}Connect: ${WHITE}http://$public_ip:$http_port${NC}                 ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}    ${YELLOW}User: ${WHITE}$http_user${NC}                                    ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}    ${YELLOW}Pass: ${WHITE}$http_pass${NC}                                      ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC} ${PURPLE}[HTTP]${NC}   ${GREEN}[OK] 运行中${NC}                                  ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}    ${YELLOW}连接: ${WHITE}http://$public_ip:$http_port${NC}                 ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}    ${YELLOW}用户: ${WHITE}$http_user${NC}                                    ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}    ${YELLOW}密码: ${WHITE}$http_pass${NC}                                      ${CYAN}|${NC}"
     else
-        echo -e "${CYAN}|${NC} ${PURPLE}[HTTP]${NC}   ${RED}[X] Not Installed or Not Running${NC}                         ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC} ${PURPLE}[HTTP]${NC}   ${RED}[X] 未安装或未运行${NC}                         ${CYAN}|${NC}"
     fi
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     echo ""
 }
 
-# Quick detailed status check
+# 快速详细状态检查
 quick_detailed_status() {
     clear
     echo -e "${BOLD}${CYAN}================================================================${NC}"
-    echo -e "${BOLD}${WHITE}                    >> Detailed Status Report <<                    ${NC}"
+    echo -e "${BOLD}${WHITE}                    >> 详细状态检查报告 <<                    ${NC}"
     echo -e "${BOLD}${CYAN}================================================================${NC}"
     echo ""
 
-    # Get public IP
+    # 获取公网IP
     local public_ip=$(get_cached_public_ip)
-    echo -e "${BOLD}${YELLOW}[Server Information]${NC}"
-    echo -e "   ${YELLOW}Public IP:${NC} ${WHITE}$public_ip${NC}"
-    echo -e "   ${YELLOW}System:${NC}   ${WHITE}$(uname -s) $(uname -r)${NC}"
+    echo -e "${BOLD}${YELLOW}[服务器信息]${NC}"
+    echo -e "   ${YELLOW}公网IP:${NC} ${WHITE}$public_ip${NC}"
+    echo -e "   ${YELLOW}系统:${NC}   ${WHITE}$(uname -s) $(uname -r)${NC}"
     echo ""
 
-    # Check SOCKS5 status
-    echo -e "${BOLD}${BLUE}[SOCKS5 Detailed Status]${NC}"
+    # 检查SOCKS5状态
+    echo -e "${BOLD}${BLUE}[SOCKS5 详细状态]${NC}"
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     if ! systemctl list-unit-files 2>/dev/null | grep -q 'danted.service'; then
-        echo -e "${CYAN}|${NC}   ${YELLOW}Status:${NC} ${RED}[X] Not Installed${NC}                                           ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}   ${YELLOW}Suggest:${NC} ${WHITE}Select menu option 1 to install${NC}                             ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}状态:${NC} ${RED}[X] 未安装${NC}                                           ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}建议:${NC} ${WHITE}选择菜单选项 1 进行安装${NC}                             ${CYAN}|${NC}"
     elif systemctl is-active --quiet danted 2>/dev/null; then
-        local socks_port=$(grep -oP 'port = \K\d+' /etc/danted.conf 2>/dev/null || echo "Unknown")
-        echo -e "${CYAN}|${NC}   ${YELLOW}Status:${NC} ${GREEN}[OK] Running${NC}                                           ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}   ${YELLOW}Port:${NC} ${WHITE}$socks_port${NC}                                         ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}   ${YELLOW}Connect:${NC} ${WHITE}socks5://$public_ip:$socks_port${NC}                     ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}   ${YELLOW}Auth:${NC} ${WHITE}System User Password${NC}                                       ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}   ${YELLOW}Config:${NC} ${WHITE}/etc/danted.conf${NC}                                   ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}   ${YELLOW}Log:${NC} ${WHITE}journalctl -u danted --no-pager -l${NC}                ${CYAN}|${NC}"
+        local socks_port=$(grep -oP 'port = \K\d+' /etc/danted.conf 2>/dev/null || echo "未知")
+        echo -e "${CYAN}|${NC}   ${YELLOW}状态:${NC} ${GREEN}[OK] 运行中${NC}                                           ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}端口:${NC} ${WHITE}$socks_port${NC}                                         ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}连接:${NC} ${WHITE}socks5://$public_ip:$socks_port${NC}                     ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}认证:${NC} ${WHITE}系统用户密码${NC}                                       ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}配置:${NC} ${WHITE}/etc/danted.conf${NC}                                   ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}日志:${NC} ${WHITE}journalctl -u danted --no-pager -l${NC}                ${CYAN}|${NC}"
     else
-        echo -e "${CYAN}|${NC}   ${YELLOW}Status:${NC} ${RED}[X] Installed but Not Running${NC}                                   ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}   ${YELLOW}Suggest:${NC} ${WHITE}systemctl start danted${NC}                            ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}   ${YELLOW}Log:${NC} ${WHITE}journalctl -u danted --no-pager -l${NC}                ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}状态:${NC} ${RED}[X] 已安装但未运行${NC}                                   ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}建议:${NC} ${WHITE}systemctl start danted${NC}                            ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}日志:${NC} ${WHITE}journalctl -u danted --no-pager -l${NC}                ${CYAN}|${NC}"
     fi
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     echo ""
 
-    # Check HTTP status
-    echo -e "${BOLD}${PURPLE}[HTTP Detailed Status]${NC}"
+    # 检查HTTP状态
+    echo -e "${BOLD}${PURPLE}[HTTP 详细状态]${NC}"
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     if ! systemctl list-unit-files 2>/dev/null | grep -q 'squid.service'; then
-        echo -e "${CYAN}|${NC}   ${YELLOW}Status:${NC} ${RED}[X] Not Installed${NC}                                           ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}   ${YELLOW}Suggest:${NC} ${WHITE}Select menu option 3 to install${NC}                             ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}状态:${NC} ${RED}[X] 未安装${NC}                                           ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}建议:${NC} ${WHITE}选择菜单选项 3 进行安装${NC}                             ${CYAN}|${NC}"
     elif systemctl is-active --quiet squid 2>/dev/null; then
-        local http_port=$(grep -oP 'http_port\s+\K\d+' /etc/squid/squid.conf 2>/dev/null || echo "Unknown")
-        local http_user="Unknown"
-        local http_pass="Unknown"
+        local http_port=$(grep -oP 'http_port\s+\K\d+' /etc/squid/squid.conf 2>/dev/null || echo "未知")
+        local http_user="未知"
+        local http_pass="未知"
 
         if [ -f "/etc/squid/passwd" ]; then
             http_user=$(cut -d: -f1 /etc/squid/passwd 2>/dev/null | head -1)
             if [ -f "/tmp/squid_password" ]; then
                 http_pass=$(cat /tmp/squid_password 2>/dev/null)
             else
-                http_pass="[Check Install Log]"
+                http_pass="[查看安装日志]"
             fi
         fi
 
-        echo -e "${CYAN}|${NC}   ${YELLOW}Status:${NC} ${GREEN}[OK] Running${NC}                                           ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}   ${YELLOW}Port:${NC} ${WHITE}$http_port${NC}                                          ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}   ${YELLOW}Connect:${NC} ${WHITE}http://$public_ip:$http_port${NC}                        ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}   ${YELLOW}User:${NC} ${WHITE}$http_user${NC}                                          ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}   ${YELLOW}Pass:${NC} ${WHITE}$http_pass${NC}                                          ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}   ${YELLOW}Config:${NC} ${WHITE}/etc/squid/squid.conf${NC}                              ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}   ${YELLOW}Auth:${NC} ${WHITE}/etc/squid/passwd${NC}                                  ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}   ${YELLOW}Log:${NC} ${WHITE}journalctl -u squid --no-pager -l${NC}                 ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}状态:${NC} ${GREEN}[OK] 运行中${NC}                                           ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}端口:${NC} ${WHITE}$http_port${NC}                                          ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}连接:${NC} ${WHITE}http://$public_ip:$http_port${NC}                        ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}用户:${NC} ${WHITE}$http_user${NC}                                          ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}密码:${NC} ${WHITE}$http_pass${NC}                                          ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}配置:${NC} ${WHITE}/etc/squid/squid.conf${NC}                              ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}认证:${NC} ${WHITE}/etc/squid/passwd${NC}                                  ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}日志:${NC} ${WHITE}journalctl -u squid --no-pager -l${NC}                 ${CYAN}|${NC}"
     else
-        echo -e "${CYAN}|${NC}   ${YELLOW}Status:${NC} ${RED}[X] Installed but Not Running${NC}                                   ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}   ${YELLOW}Suggest:${NC} ${WHITE}systemctl start squid${NC}                             ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}   ${YELLOW}Log:${NC} ${WHITE}journalctl -u squid --no-pager -l${NC}                 ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}状态:${NC} ${RED}[X] 已安装但未运行${NC}                                   ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}建议:${NC} ${WHITE}systemctl start squid${NC}                             ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}   ${YELLOW}日志:${NC} ${WHITE}journalctl -u squid --no-pager -l${NC}                 ${CYAN}|${NC}"
     fi
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     echo ""
     echo -e "${BOLD}${GREEN}================================================================${NC}"
-    echo -e "${BOLD}${WHITE}                    >> Detailed Status Check Complete! <<                   ${NC}"
+    echo -e "${BOLD}${WHITE}                    >> 详细状态检查完成！ <<                   ${NC}"
     echo -e "${BOLD}${GREEN}================================================================${NC}"
 }
 
-# Install and configure Dante
+# 安装和配置 Dante
 install_dante() {
     echo
-    echo "===== Starting SOCKS5 (Dante) Proxy Installation ====="
+    echo "===== 开始安装 SOCKS5 (Dante) 代理 ====="
 
-    # 1. Get user input for port
-    read -p "Enter SOCKS5 proxy port [default 8087]: " PORT
+    # 1. 获取用户输入的端口
+    read -p "请输入SOCKS5代理要使用的端口 [默认 8087]: " PORT
     PORT=${PORT:-8087}
     echo
 
-    # 2. Install dante-server
-    echo ">>> [1/6] Installing dante-server..."
+    # 2. 安装 dante-server
+    echo ">>> [1/6] 正在安装 dante-server..."
     if [ -x "$(command -v apt-get)" ]; then
         apt-get update > /dev/null 2>&1
         apt-get install -y dante-server
@@ -203,30 +203,30 @@ install_dante() {
         yum install -y epel-release
         yum install -y dante-server
     else
-        echo "Error: Unsupported OS. Please run on Debian/Ubuntu/CentOS."
+        echo "错误：不支持的操作系统。请在 Debian/Ubuntu/CentOS 上运行。"
         exit 1
     fi
-    echo ">>> dante-server installation completed."
+    echo ">>> dante-server 安装完成。"
 
-    # 3. Configure PAM authentication
-    echo ">>> [2/6] Configuring PAM authentication module..."
+    # 3. 配置PAM认证
+    echo ">>> [2/6] 正在配置PAM认证模块..."
     PAM_CONF="/etc/pam.d/danted"
     tee $PAM_CONF > /dev/null <<EOF
 #%PAM-1.0
 auth       required   pam_unix.so
 account    required   pam_unix.so
 EOF
-    echo ">>> PAM configuration completed."
+    echo ">>> PAM配置完成。"
 
-    # 4. Write dante-server configuration file
-    echo ">>> [3/6] Generating danted.conf configuration file..."
+    # 4. 写入 dante-server 配置文件
+    echo ">>> [3/6] 正在生成 danted.conf 配置文件..."
     IFACE=$(ip route get 8.8.8.8 | grep -oP 'dev \K\S+')
     CONF="/etc/danted.conf"
     [ -f $CONF ] && mv $CONF "$CONF.bak.$(date +%F-%T)"
     tee $CONF > /dev/null <<EOF
 logoutput: syslog
 
-# Key modification: Listen on all IPv4 interfaces, not just internal IP
+# 关键修改：监听在所有IPv4接口上，而不是仅限内网IP
 internal: 0.0.0.0 port = $PORT
 external: $IFACE
 
@@ -243,35 +243,35 @@ pass {
     log: error connect disconnect
 }
 EOF
-    echo ">>> Configuration file written successfully."
+    echo ">>> 配置文件写入完成。"
 
-    # 5. Configure firewall
-    echo ">>> [4/6] Configuring firewall..."
+    # 5. 新增：配置防火墙
+    echo ">>> [4/6] 正在配置防火墙..."
     if command -v ufw >/dev/null 2>&1; then
         ufw allow $PORT/tcp
-        echo ">>> Added UFW rule to allow port $PORT."
+        echo ">>> 已添加 UFW 规则以放行端口 $PORT。"
     elif command -v firewall-cmd >/dev/null 2>&1; then
         firewall-cmd --permanent --add-port=$PORT/tcp
         firewall-cmd --reload
-        echo ">>> Added firewalld rule to allow port $PORT."
+        echo ">>> 已添加 firewalld 规则以放行端口 $PORT。"
     else
-        echo ">>> UFW or firewalld not detected, please manually configure firewall to allow TCP port $PORT."
+        echo ">>> 未检测到 UFW 或 firewalld，请手动配置防火墙以放行TCP端口 $PORT。"
     fi
 
-    # 6. Start service and enable auto-start
-    echo ">>> [5/6] Starting danted service and enabling auto-start..."
+    # 6. 启动服务并设置开机自启
+    echo ">>> [5/6] 正在启动 danted 服务并设置开机自启..."
     if systemctl restart danted 2>/dev/null && systemctl enable danted 2>/dev/null; then
-        echo ">>> danted service started."
+        echo ">>> danted 服务已启动。"
     else
-        echo ">>> Warning: Service startup may have issues, continuing status check..."
+        echo ">>> 警告：服务启动可能有问题，继续检查状态..."
     fi
 
-    # 7. Monitor and confirm service status
-    echo ">>> [6/6] Checking service running status..."
-    # Wait for service to fully start, but reduce wait time
+    # 7. 监控并确认服务状态
+    echo ">>> [6/6] 正在检查服务运行状态..."
+    # 等待服务完全启动，但减少等待时间
     sleep 0.5
 
-    # Retry mechanism: try up to 3 times to check service status
+    # 重试机制：最多尝试3次检查服务状态
     local retry_count=0
     local max_retries=3
     local service_running=false
@@ -283,30 +283,30 @@ EOF
         fi
         retry_count=$((retry_count + 1))
         if [ $retry_count -lt $max_retries ]; then
-            echo ">>> Check $retry_count failed, retrying..."
+            echo ">>> 第 $retry_count 次检查失败，重试中..."
             sleep 1
         fi
     done
 
     if [ "$service_running" = true ]; then
-        # Get public IP with timeout mechanism
-        PUBLIC_IP=$(timeout 5 curl -s http://ipv4.icanhazip.com/ 2>/dev/null || echo "FAILED")
+        # 获取公网IP，使用超时机制
+        PUBLIC_IP=$(timeout 5 curl -s http://ipv4.icanhazip.com/ 2>/dev/null || echo "获取失败")
         echo ""
         echo -e "${BOLD}${GREEN}================================================================${NC}"
-        echo -e "${BOLD}${WHITE}                  >> SOCKS5 Proxy Installation Success! <<                 ${NC}"
+        echo -e "${BOLD}${WHITE}                  >> SOCKS5 代理安装成功！ <<                 ${NC}"
         echo -e "${BOLD}${GREEN}================================================================${NC}"
-        echo -e "${BOLD}${WHITE}  Connect Info: socks5://$PUBLIC_IP:$PORT                       ${NC}"
-        echo -e "${BOLD}${WHITE}  Auth Method: System User Password (e.g. root)                         ${NC}"
-        echo -e "${BOLD}${WHITE}  Service Status: Running                                         ${NC}"
+        echo -e "${BOLD}${WHITE}  连接信息: socks5://$PUBLIC_IP:$PORT                       ${NC}"
+        echo -e "${BOLD}${WHITE}  认证方式: 系统用户密码 (如 root)                         ${NC}"
+        echo -e "${BOLD}${WHITE}  服务状态: 运行中                                         ${NC}"
         echo -e "${BOLD}${GREEN}================================================================${NC}"
     else
         echo ""
         echo -e "${BOLD}${RED}================================================================${NC}"
-        echo -e "${BOLD}${WHITE}                  >> SOCKS5 Service Startup Failed! <<                  ${NC}"
+        echo -e "${BOLD}${WHITE}                  >> SOCKS5 服务启动失败！ <<                  ${NC}"
         echo -e "${BOLD}${RED}================================================================${NC}"
-        echo -e "${BOLD}${WHITE}  Please run the following command to view detailed error logs:                         ${NC}"
+        echo -e "${BOLD}${WHITE}  请运行以下命令查看详细错误日志：                         ${NC}"
         echo -e "${BOLD}${WHITE}     journalctl -u danted --no-pager -l                      ${NC}"
-        echo -e "${BOLD}${WHITE}  Or check configuration file:                                         ${NC}"
+        echo -e "${BOLD}${WHITE}  或检查配置文件：                                         ${NC}"
         echo -e "${BOLD}${WHITE}     cat /etc/danted.conf                                     ${NC}"
         echo -e "${BOLD}${RED}================================================================${NC}"
     fi
@@ -565,27 +565,27 @@ check_root
 # Main menu loop
 while true; do
     check_status
-    echo -e "${BOLD}${YELLOW}>> Please select an operation:${NC}"
+    echo -e "${BOLD}${YELLOW}>> 请选择您要执行的操作:${NC}"
     echo ""
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
-    echo -e "${CYAN}|${NC} ${BLUE}[SOCKS5 Proxy Management]${NC}                                         ${CYAN}|${NC}"
-    echo -e "${CYAN}|${NC}  ${WHITE}1)${NC} ${GREEN}Install SOCKS5 (Dante) Proxy${NC}                               ${CYAN}|${NC}"
-    echo -e "${CYAN}|${NC}  ${WHITE}2)${NC} ${RED}Uninstall SOCKS5 (Dante) Proxy${NC}                               ${CYAN}|${NC}"
-    echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
-    echo ""
-    echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
-    echo -e "${CYAN}|${NC} ${PURPLE}[HTTP Proxy Management]${NC}                                           ${CYAN}|${NC}"
-    echo -e "${CYAN}|${NC}  ${WHITE}3)${NC} ${GREEN}Install HTTP (Squid) Proxy${NC}                                 ${CYAN}|${NC}"
-    echo -e "${CYAN}|${NC}  ${WHITE}4)${NC} ${RED}Uninstall HTTP (Squid) Proxy${NC}                                 ${CYAN}|${NC}"
+    echo -e "${CYAN}|${NC} ${BLUE}[SOCKS5 代理管理]${NC}                                         ${CYAN}|${NC}"
+    echo -e "${CYAN}|${NC}  ${WHITE}1)${NC} ${GREEN}安装 SOCKS5 (Dante) 代理${NC}                               ${CYAN}|${NC}"
+    echo -e "${CYAN}|${NC}  ${WHITE}2)${NC} ${RED}卸载 SOCKS5 (Dante) 代理${NC}                               ${CYAN}|${NC}"
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     echo ""
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
-    echo -e "${CYAN}|${NC} ${YELLOW}[Other Options]${NC}                                                ${CYAN}|${NC}"
-    echo -e "${CYAN}|${NC}  ${WHITE}5)${NC} ${BOLD}Quick Status Check (Detailed)${NC}                                 ${CYAN}|${NC}"
-    echo -e "${CYAN}|${NC}  ${WHITE}0)${NC} ${BOLD}Exit Script${NC}                                               ${CYAN}|${NC}"
+    echo -e "${CYAN}|${NC} ${PURPLE}[HTTP 代理管理]${NC}                                           ${CYAN}|${NC}"
+    echo -e "${CYAN}|${NC}  ${WHITE}3)${NC} ${GREEN}安装 HTTP (Squid) 代理${NC}                                 ${CYAN}|${NC}"
+    echo -e "${CYAN}|${NC}  ${WHITE}4)${NC} ${RED}卸载 HTTP (Squid) 代理${NC}                                 ${CYAN}|${NC}"
+    echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
+    echo ""
+    echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
+    echo -e "${CYAN}|${NC} ${YELLOW}[其他选项]${NC}                                                ${CYAN}|${NC}"
+    echo -e "${CYAN}|${NC}  ${WHITE}5)${NC} ${BOLD}快速状态检查（详细版）${NC}                                 ${CYAN}|${NC}"
+    echo -e "${CYAN}|${NC}  ${WHITE}0)${NC} ${BOLD}退出脚本${NC}                                               ${CYAN}|${NC}"
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     echo
-    read -p "Enter option [0-5]: " main_choice
+    read -p "请输入选项 [0-5]: " main_choice
 
     case $main_choice in
         1)
@@ -604,13 +604,13 @@ while true; do
             quick_detailed_status
             ;;
         0)
-            echo "Exiting script."
+            echo "退出脚本。"
             exit 0
             ;;
         *)
-            echo "Invalid input, please enter a number between 0-5."
+            echo "无效输入，请输入 0-5 之间的数字。"
             ;;
     esac
     echo
-    read -p "Press [Enter] to return to main menu..."
+    read -p "按 [Enter] 键返回主菜单..."
 done
