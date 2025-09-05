@@ -24,27 +24,6 @@ check_root() {
     exit 1
   fi
 }
-# 临时切换APT镜像到腾讯（仅当安装失败时触发，可还原）
-APT_SRC_BACKUP="/etc/apt/sources.list.bak.sock5"
-switch_apt_to_tencent() {
-  if [ ! -f "$APT_SRC_BACKUP" ]; then
-    cp -f /etc/apt/sources.list "$APT_SRC_BACKUP" 2>/dev/null || true
-  fi
-  cat >/etc/apt/sources.list <<'EOF_SOURCES'
-deb http://mirrors.tencent.com/ubuntu/ focal main restricted universe multiverse
-deb http://mirrors.tencent.com/ubuntu/ focal-updates main restricted universe multiverse
-deb http://mirrors.tencent.com/ubuntu/ focal-backports main restricted universe multiverse
-deb http://mirrors.tencent.com/ubuntu/ focal-security main restricted universe multiverse
-EOF_SOURCES
-  apt_smart_update_if_needed
-}
-restore_apt_sources_if_needed() {
-  if [ -f "$APT_SRC_BACKUP" ]; then
-    cp -f "$APT_SRC_BACKUP" /etc/apt/sources.list 2>/dev/null || true
-    rm -f "$APT_SRC_BACKUP" 2>/dev/null || true
-    apt_smart_update_if_needed
-  fi
-}
 
 # ---------------- APT/YUM 加速与智能更新（仅脚本内生效） ----------------
 # 说明：
@@ -165,6 +144,19 @@ check_status() {
     echo -e "${BOLD}${CYAN}================================================================${NC}"
     echo -e "${BOLD}${WHITE}                    >> 代理服务管理中心 <<                    ${NC}"
     echo -e "${BOLD}${WHITE}                HTTP & SOCKS5 代理一键管理工具                ${NC}"
+    # 确保存在一个可用的系统用户用于认证（若无则引导创建）
+    if ! id -u socksuser >/dev/null 2>&1; then
+        read -p "是否创建系统用户 socksuser 用于Dante认证? [Y/n]: " CREATE_USER
+        CREATE_USER=${CREATE_USER:-Y}
+        if [[ "$CREATE_USER" =~ ^[Yy]$ ]]; then
+            useradd -m -s /usr/sbin/nologin socksuser || true
+            echo "请为 socksuser 设置密码（用于SOCKS5认证，与SSH无关）"
+            passwd socksuser || true
+        else
+            echo "将使用你系统里已有用户进行认证（例如 root 或其他已有用户）。"
+        fi
+    fi
+
     echo -e "${BOLD}${CYAN}================================================================${NC}"
     echo ""
     echo -e "${BOLD}${YELLOW}[状态检查] 当前服务状态:${NC}"
@@ -223,19 +215,9 @@ install_dante() {
     echo
     echo "===== 开始安装 SOCKS5 代理 ====="
 
-    # 1. 获取用户输入的端口/账号
+    # 1. 获取用户输入的端口
     read -p "请输入SOCKS5代理要使用的端口 [默认 8087]: " PORT
     PORT=${PORT:-8087}
-    read -p "请输入SOCKS5用户名 [默认 socksuser]: " SOCKS_USER
-    SOCKS_USER=${SOCKS_USER:-socksuser}
-    read -p "请输入SOCKS5密码 [默认随机生成]: " SOCKS_PASS
-    if [ -z "$SOCKS_PASS" ]; then
-        if command -v openssl >/dev/null 2>&1; then
-            SOCKS_PASS=$(openssl rand -base64 12 | tr -d '=+/\n' | cut -c1-16)
-        else
-            SOCKS_PASS=$(head -c 32 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 16)
-        fi
-    fi
     echo
 
     # 2. 安装 dante-server
@@ -267,19 +249,11 @@ install_dante() {
         # 安装成功后可选择是否还原源，这里保持腾讯镜像以便后续安装更快；如需还原请解除下一行注释
         # restore_apt_sources_if_needed
     fi
-    PASS_FILE="/etc/danted.passwd"
-    # 生成/更新口令文件（不可群组读）
-    touch "$PASS_FILE" && chmod 640 "$PASS_FILE"
-    if ! grep -q "^$SOCKS_USER:" "$PASS_FILE" 2>/dev/null; then
-        htpasswd -bBC 10 "$PASS_FILE" "$SOCKS_USER" "$SOCKS_PASS" >/dev/null
-    else
-        htpasswd -bB  "$PASS_FILE" "$SOCKS_USER" "$SOCKS_PASS" >/dev/null
-    fi
     PAM_CONF="/etc/pam.d/danted"
     tee "$PAM_CONF" > /dev/null <<EOF
 #%PAM-1.0
-auth    required pam_pwdfile.so pwdfile=$PASS_FILE
-account required pam_permit.so
+auth       required   pam_unix.so
+account    required   pam_unix.so
 EOF
     echo ">>> PAM配置完成。"
 
@@ -295,7 +269,7 @@ logoutput: syslog
 internal: 0.0.0.0 port = $PORT
 external: $IFACE
 
-# SOCKS5 方法：仅使用 username（PAM）
+# SOCKS5 方法：仅使用 username（PAM，系统用户）
 method: username
 user.notprivileged: nobody
 
@@ -369,7 +343,7 @@ EOF
         echo -e "${BOLD}${WHITE}                  >> SOCKS5 代理安装成功！ <<                ${NC}"
         echo -e "${BOLD}${GREEN}================================================================${NC}"
         echo -e "${BOLD}${WHITE}  连接信息: socks5://$PUBLIC_IP:$PORT                     ${NC}"
-        echo -e "${BOLD}${WHITE}  认证方式: 独立口令文件（/etc/danted.passwd）           ${NC}"
+        echo -e "${BOLD}${WHITE}  认证方式: 系统用户密码 (如 root 或你创建的普通用户)    ${NC}"
         echo -e "${BOLD}${WHITE}  服务状态: 运行中                                         ${NC}"
         echo -e "${BOLD}${GREEN}================================================================${NC}"
     else
