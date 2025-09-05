@@ -77,66 +77,16 @@ apt_smart_update_if_needed() {
           update -y > /dev/null 2>&1 || true
 }
 
-# 快速安装（APT）：强制IPv4、重试、超时、无推荐包，支持源切换重试
+# 快速安装（APT）：强制IPv4、重试、超时、无推荐包
 apt_fast_install() {
-  local packages="$@"
-  local install_success=false
-  local sources_switched=false
-
-  # 第一次尝试：使用当前源
-  echo ">>> 尝试安装软件包: $packages"
   apt_wait_for_locks 60
-  if DEBIAN_FRONTEND=noninteractive \
-     apt-get -o Acquire::ForceIPv4=true \
-             -o Acquire::Retries=3 \
-             -o Acquire::http::Timeout=10 \
-             -o Dpkg::Use-Pty=0 \
-             -o Acquire::Languages=none \
-             install -y --no-install-recommends "$packages"; then
-    install_success=true
-    echo ">>> 软件包安装成功"
-  else
-    echo ">>> 当前源安装失败，尝试切换到国内镜像源..."
-
-    # 备份当前源并切换到国内源
-    backup_sources
-    switch_to_china_sources
-    sources_switched=true
-
-    # 更新包索引
-    apt_smart_update_if_needed
-
-    # 第二次尝试：使用国内源
-    echo ">>> 使用国内镜像源重试安装..."
-    apt_wait_for_locks 60
-    if DEBIAN_FRONTEND=noninteractive \
-       apt-get -o Acquire::ForceIPv4=true \
-               -o Acquire::Retries=3 \
-               -o Acquire::http::Timeout=10 \
-               -o Dpkg::Use-Pty=0 \
-               -o Acquire::Languages=none \
-               install -y --no-install-recommends "$packages"; then
-      install_success=true
-      echo ">>> 使用国内源安装成功"
-    else
-      echo ">>> 国内源安装也失败"
-    fi
-  fi
-
-  # 恢复原始源配置（如果切换过）
-  if [ "$sources_switched" = true ]; then
-    echo ">>> 恢复原始源配置..."
-    restore_sources
-    # 恢复后重新更新索引
-    apt_smart_update_if_needed
-  fi
-
-  if [ "$install_success" = false ]; then
-    echo ">>> 错误：软件包安装失败，请检查网络连接或手动安装"
-    return 1
-  fi
-
-  return 0
+  DEBIAN_FRONTEND=noninteractive \
+  apt-get -o Acquire::ForceIPv4=true \
+          -o Acquire::Retries=3 \
+          -o Acquire::http::Timeout=10 \
+          -o Dpkg::Use-Pty=0 \
+          -o Acquire::Languages=none \
+          install -y --no-install-recommends "$@"
 }
 
 # YUM 加速：建立缓存与快速安装
@@ -145,52 +95,7 @@ yum_fast_makecache() {
 }
 
 yum_fast_install() {
-  local packages="$@"
-  local install_success=false
-  local sources_switched=false
-
-  # 第一次尝试：使用当前源
-  echo ">>> 尝试安装软件包: $packages"
-  if yum -y --setopt=timeout=10 --setopt=retries=3 install "$packages"; then
-    install_success=true
-    echo ">>> 软件包安装成功"
-  else
-    echo ">>> 当前源安装失败，尝试切换到国内镜像源..."
-
-    # 备份当前源并切换到国内源
-    backup_sources
-    switch_to_china_sources
-    sources_switched=true
-
-    # 清理并重建缓存
-    yum clean all >/dev/null 2>&1
-    yum_fast_makecache
-
-    # 第二次尝试：使用国内源
-    echo ">>> 使用国内镜像源重试安装..."
-    if yum -y --setopt=timeout=10 --setopt=retries=3 install "$packages"; then
-      install_success=true
-      echo ">>> 使用国内源安装成功"
-    else
-      echo ">>> 国内源安装也失败"
-    fi
-  fi
-
-  # 恢复原始源配置（如果切换过）
-  if [ "$sources_switched" = true ]; then
-    echo ">>> 恢复原始源配置..."
-    restore_sources
-    # 恢复后重新建立缓存
-    yum clean all >/dev/null 2>&1
-    yum_fast_makecache
-  fi
-
-  if [ "$install_success" = false ]; then
-    echo ">>> 错误：软件包安装失败，请检查网络连接或手动安装"
-    return 1
-  fi
-
-  return 0
+  yum -y --setopt=timeout=10 --setopt=retries=3 install "$@"
 }
 
 # 计时器：打印命令耗时（秒）
@@ -202,144 +107,6 @@ measure() {
   local end=$(date +%s)
   echo ">>> ${label} 用时 $((end-start)) 秒 (exit=$code)"
   return $code
-}
-
-# ---------------- 系统源管理与切换（网络优化） ----------------
-
-# 检测系统信息
-detect_system_info() {
-  if [ -f /etc/os-release ]; then
-    . /etc/os-release
-    OS_ID="$ID"
-    OS_VERSION_ID="$VERSION_ID"
-    OS_CODENAME="$VERSION_CODENAME"
-  elif [ -f /etc/redhat-release ]; then
-    OS_ID="centos"
-    OS_VERSION_ID=$(grep -oE '[0-9]+' /etc/redhat-release | head -1)
-  else
-    OS_ID="unknown"
-  fi
-
-  # 检测架构
-  ARCH=$(uname -m)
-  case "$ARCH" in
-    x86_64) ARCH="amd64" ;;
-    aarch64) ARCH="arm64" ;;
-    armv7l) ARCH="armhf" ;;
-  esac
-}
-
-# 备份当前源配置
-backup_sources() {
-  local backup_suffix=$(date +%Y%m%d_%H%M%S)
-
-  if [ -x "$(command -v apt-get)" ]; then
-    if [ -f /etc/apt/sources.list ]; then
-      cp /etc/apt/sources.list "/etc/apt/sources.list.backup_$backup_suffix"
-      echo ">>> 已备份 APT 源配置到 /etc/apt/sources.list.backup_$backup_suffix"
-    fi
-    if [ -d /etc/apt/sources.list.d ]; then
-      cp -r /etc/apt/sources.list.d "/etc/apt/sources.list.d.backup_$backup_suffix"
-      echo ">>> 已备份 APT 源目录到 /etc/apt/sources.list.d.backup_$backup_suffix"
-    fi
-  elif [ -x "$(command -v yum)" ]; then
-    if [ -d /etc/yum.repos.d ]; then
-      cp -r /etc/yum.repos.d "/etc/yum.repos.d.backup_$backup_suffix"
-      echo ">>> 已备份 YUM 源配置到 /etc/yum.repos.d.backup_$backup_suffix"
-    fi
-  fi
-}
-
-# 切换到国内镜像源
-switch_to_china_sources() {
-  detect_system_info
-
-  if [ -x "$(command -v apt-get)" ]; then
-    echo ">>> 切换到阿里云 APT 镜像源..."
-
-    # 生成新的 sources.list
-    case "$OS_ID" in
-      ubuntu)
-        cat > /etc/apt/sources.list << EOF
-# 阿里云 Ubuntu 镜像源
-deb https://mirrors.aliyun.com/ubuntu/ ${OS_CODENAME} main restricted universe multiverse
-deb https://mirrors.aliyun.com/ubuntu/ ${OS_CODENAME}-updates main restricted universe multiverse
-deb https://mirrors.aliyun.com/ubuntu/ ${OS_CODENAME}-backports main restricted universe multiverse
-deb https://mirrors.aliyun.com/ubuntu/ ${OS_CODENAME}-security main restricted universe multiverse
-EOF
-        ;;
-      debian)
-        cat > /etc/apt/sources.list << EOF
-# 阿里云 Debian 镜像源
-deb https://mirrors.aliyun.com/debian/ ${OS_CODENAME} main non-free contrib
-deb https://mirrors.aliyun.com/debian/ ${OS_CODENAME}-updates main non-free contrib
-deb https://mirrors.aliyun.com/debian/ ${OS_CODENAME}-backports main non-free contrib
-deb https://mirrors.aliyun.com/debian-security/ ${OS_CODENAME}-security main non-free contrib
-EOF
-        ;;
-    esac
-
-  elif [ -x "$(command -v yum)" ]; then
-    echo ">>> 切换到阿里云 YUM 镜像源..."
-
-    # 备份并替换 CentOS 源
-    if [ "$OS_ID" = "centos" ]; then
-      # 禁用所有现有源
-      find /etc/yum.repos.d -name "*.repo" -exec mv {} {}.disabled \;
-
-      # 创建阿里云源配置
-      cat > /etc/yum.repos.d/aliyun.repo << EOF
-[base]
-name=CentOS-\$releasever - Base - mirrors.aliyun.com
-baseurl=https://mirrors.aliyun.com/centos/\$releasever/os/\$basearch/
-gpgcheck=1
-gpgkey=https://mirrors.aliyun.com/centos/RPM-GPG-KEY-CentOS-${OS_VERSION_ID}
-
-[updates]
-name=CentOS-\$releasever - Updates - mirrors.aliyun.com
-baseurl=https://mirrors.aliyun.com/centos/\$releasever/updates/\$basearch/
-gpgcheck=1
-gpgkey=https://mirrors.aliyun.com/centos/RPM-GPG-KEY-CentOS-${OS_VERSION_ID}
-
-[extras]
-name=CentOS-\$releasever - Extras - mirrors.aliyun.com
-baseurl=https://mirrors.aliyun.com/centos/\$releasever/extras/\$basearch/
-gpgcheck=1
-gpgkey=https://mirrors.aliyun.com/centos/RPM-GPG-KEY-CentOS-${OS_VERSION_ID}
-EOF
-    fi
-  fi
-}
-
-# 恢复原始源配置
-restore_sources() {
-  local latest_backup=""
-
-  if [ -x "$(command -v apt-get)" ]; then
-    # 查找最新的备份文件
-    latest_backup=$(ls -t /etc/apt/sources.list.backup_* 2>/dev/null | head -1)
-    if [ -n "$latest_backup" ]; then
-      cp "$latest_backup" /etc/apt/sources.list
-      echo ">>> 已恢复 APT 源配置从 $latest_backup"
-    fi
-
-    # 恢复 sources.list.d 目录
-    latest_backup=$(ls -td /etc/apt/sources.list.d.backup_* 2>/dev/null | head -1)
-    if [ -n "$latest_backup" ]; then
-      rm -rf /etc/apt/sources.list.d
-      cp -r "$latest_backup" /etc/apt/sources.list.d
-      echo ">>> 已恢复 APT 源目录从 $latest_backup"
-    fi
-
-  elif [ -x "$(command -v yum)" ]; then
-    # 恢复 YUM 源配置
-    latest_backup=$(ls -td /etc/yum.repos.d.backup_* 2>/dev/null | head -1)
-    if [ -n "$latest_backup" ]; then
-      rm -rf /etc/yum.repos.d
-      cp -r "$latest_backup" /etc/yum.repos.d
-      echo ">>> 已恢复 YUM 源配置从 $latest_backup"
-    fi
-  fi
 }
 
 # ---------------------------------------------------------------------
