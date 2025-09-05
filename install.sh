@@ -14,43 +14,175 @@ check_root() {
   fi
 }
 
+# 缓存公网IP以提高状态检查速度
+get_cached_public_ip() {
+    local cache_file="/tmp/proxy_public_ip"
+    local cache_timeout=300  # 5分钟缓存
+    local cached_ip=""
+    local cache_age=0
+
+    # 检查缓存文件是否存在且未过期
+    if [ -f "$cache_file" ]; then
+        cache_age=$(($(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || echo 0)))
+        if [ $cache_age -lt $cache_timeout ]; then
+            cached_ip=$(cat "$cache_file" 2>/dev/null)
+        fi
+    fi
+
+    # 如果缓存有效，直接返回
+    if [ ! -z "$cached_ip" ] && [ "$cached_ip" != "获取失败" ]; then
+        echo "$cached_ip"
+        return
+    fi
+
+    # 获取新的IP并缓存
+    local new_ip=$(timeout 3 curl -s http://ipv4.icanhazip.com/ 2>/dev/null || timeout 3 curl -s http://checkip.amazonaws.com/ 2>/dev/null || echo "获取失败")
+    echo "$new_ip" > "$cache_file" 2>/dev/null
+    echo "$new_ip"
+}
+
 # 检查并显示当前服务状态
 check_status() {
-    echo "============================================"
-    echo "     HTTP & SOCKS5 代理管理脚本"
-    echo "============================================"
-    echo "当前服务状态:"
+    clear
+    echo "╔══════════════════════════════════════════════════════════════╗"
+    echo "║                    🚀 代理服务管理中心 🚀                    ║"
+    echo "║                HTTP & SOCKS5 代理一键管理工具                ║"
+    echo "╚══════════════════════════════════════════════════════════════╝"
+    echo ""
+    echo "📊 当前服务状态:"
+
+    # 获取公网IP（使用缓存机制，避免重复网络请求）
+    local public_ip=$(get_cached_public_ip)
 
     # 检查SOCKS5 (Dante)状态
-    if ! systemctl list-unit-files | grep -q 'danted.service'; then
-        echo "  - SOCKS5 (Dante): ❌ 未安装"
-    elif systemctl is-active --quiet danted; then
-        local socks_port=$(grep -oP 'port = \K\d+' /etc/danted.conf || echo "未知")
-        local public_ip=$(curl -s http://ipv4.icanhazip.com/ || curl -s http://checkip.amazonaws.com/ || echo "未知")
-        echo "  - SOCKS5 (Dante): ✅ 运行中"
-        echo "    连接信息: socks5:$public_ip:$socks_port:root:[系统用户密码]"
+    echo "┌─────────────────────────────────────────────────────────────┐"
+    if ! systemctl list-unit-files 2>/dev/null | grep -q 'danted.service'; then
+        echo "│ 🔵 SOCKS5 (Dante): ❌ 未安装                                │"
+    elif systemctl is-active --quiet danted 2>/dev/null; then
+        local socks_port=$(grep -oP 'port = \K\d+' /etc/danted.conf 2>/dev/null || echo "未知")
+        echo "│ 🔵 SOCKS5 (Dante): ✅ 运行中                               │"
+        echo "│    📡 连接信息: socks5://$public_ip:$socks_port              │"
+        echo "│    🔐 认证方式: 系统用户密码                                │"
     else
-        echo "  - SOCKS5 (Dante): ❌ 已安装但未运行"
+        echo "│ 🔵 SOCKS5 (Dante): ❌ 已安装但未运行                       │"
     fi
+    echo "├─────────────────────────────────────────────────────────────┤"
 
     # 检查HTTP (Squid)状态
-    if systemctl is-active --quiet squid; then
-        local http_port=$(grep -oP 'http_port\s+\K\d+' /etc/squid/squid.conf || echo "未知")
-        local public_ip=$(curl -s http://ipv4.icanhazip.com/ || curl -s http://checkip.amazonaws.com/ || echo "未知")
+    if systemctl is-active --quiet squid 2>/dev/null; then
+        local http_port=$(grep -oP 'http_port\s+\K\d+' /etc/squid/squid.conf 2>/dev/null || echo "未知")
         local http_user="未知"
-        local http_pass="[已设置]"
+        local http_pass="未知"
 
-        # 尝试从认证文件中获取用户名
+        # 尝试从认证文件中获取用户名和密码
         if [ -f "/etc/squid/passwd" ]; then
-            http_user=$(cut -d: -f1 /etc/squid/passwd | head -1)
+            http_user=$(cut -d: -f1 /etc/squid/passwd 2>/dev/null | head -1)
+            # 从安装时的临时文件或配置中获取密码
+            if [ -f "/tmp/squid_password" ]; then
+                http_pass=$(cat /tmp/squid_password 2>/dev/null)
+            else
+                http_pass="[请查看安装日志]"
+            fi
         fi
 
-        echo "  - HTTP (Squid): ✅ 运行中"
-        echo "    连接信息: http:$public_ip:$http_port:$http_user:$http_pass"
+        echo "│ 🟠 HTTP (Squid): ✅ 运行中                                  │"
+        echo "│    📡 连接信息: http://$public_ip:$http_port                 │"
+        echo "│    👤 用户名: $http_user                                    │"
+        echo "│    🔑 密码: $http_pass                                      │"
     else
-        echo "  - HTTP (Squid): ❌ 未安装或未运行"
+        echo "│ 🟠 HTTP (Squid): ❌ 未安装或未运行                         │"
     fi
-    echo "--------------------------------------------"
+    echo "└─────────────────────────────────────────────────────────────┘"
+    echo ""
+}
+
+# 快速详细状态检查
+quick_detailed_status() {
+    clear
+    echo "╔══════════════════════════════════════════════════════════════╗"
+    echo "║                    📊 详细状态检查报告 📊                    ║"
+    echo "╚══════════════════════════════════════════════════════════════╝"
+    echo ""
+
+    # 获取公网IP
+    local public_ip=$(get_cached_public_ip)
+    echo "🌐 服务器信息:"
+    echo "   📍 公网IP: $public_ip"
+    echo "   🖥️  系统: $(uname -s) $(uname -r)"
+    echo ""
+
+    # 检查SOCKS5状态
+    echo "┌─ � SOCKS5 (Dante) 详细状态 ─────────────────────────────────┐"
+    if ! systemctl list-unit-files 2>/dev/null | grep -q 'danted.service'; then
+        echo "│   状态: ❌ 未安装                                           │"
+        echo "│   建议: 选择菜单选项 1 进行安装                             │"
+    elif systemctl is-active --quiet danted 2>/dev/null; then
+        local socks_port=$(grep -oP 'port = \K\d+' /etc/danted.conf 2>/dev/null || echo "未知")
+        echo "│   状态: ✅ 运行中                                           │"
+        echo "│   端口: $socks_port                                         │"
+        echo "│   连接: socks5://$public_ip:$socks_port                     │"
+        echo "│   认证: 系统用户密码                                       │"
+        echo "│   配置: /etc/danted.conf                                   │"
+        echo "│   日志: journalctl -u danted --no-pager -l                │"
+    else
+        echo "│   状态: ❌ 已安装但未运行                                   │"
+        echo "│   建议: systemctl start danted                            │"
+        echo "│   日志: journalctl -u danted --no-pager -l                │"
+    fi
+    echo "└─────────────────────────────────────────────────────────────┘"
+    echo ""
+
+    # 检查HTTP状态
+    echo "┌─ � HTTP (Squid) 详细状态 ──────────────────────────────────┐"
+    if ! systemctl list-unit-files 2>/dev/null | grep -q 'squid.service'; then
+        echo "│   状态: ❌ 未安装                                           │"
+        echo "│   建议: 选择菜单选项 3 进行安装                             │"
+    elif systemctl is-active --quiet squid 2>/dev/null; then
+        local http_port=$(grep -oP 'http_port\s+\K\d+' /etc/squid/squid.conf 2>/dev/null || echo "未知")
+        local http_user="未知"
+        local http_pass="未知"
+
+        if [ -f "/etc/squid/passwd" ]; then
+            http_user=$(cut -d: -f1 /etc/squid/passwd 2>/dev/null | head -1)
+            if [ -f "/tmp/squid_password" ]; then
+                http_pass=$(cat /tmp/squid_password 2>/dev/null)
+            else
+                http_pass="[查看安装日志]"
+            fi
+        fi
+
+        echo "│   状态: ✅ 运行中                                           │"
+        echo "│   端口: $http_port                                          │"
+        echo "│   连接: http://$public_ip:$http_port                        │"
+        echo "│   用户: $http_user                                          │"
+        echo "│   密码: $http_pass                                          │"
+        echo "│   配置: /etc/squid/squid.conf                              │"
+        echo "│   认证: /etc/squid/passwd                                  │"
+        echo "│   日志: journalctl -u squid --no-pager -l                 │"
+    else
+        echo "│   状态: ❌ 已安装但未运行                                   │"
+        echo "│   建议: systemctl start squid                             │"
+        echo "│   日志: journalctl -u squid --no-pager -l                 │"
+    fi
+    echo "└─────────────────────────────────────────────────────────────┘"
+    echo ""
+
+    # 系统资源信息
+    echo "┌─ 📊 系统资源使用情况 ───────────────────────────────────────┐"
+    if command -v free >/dev/null 2>&1; then
+        echo "│   💾 内存使用: $(free -h | awk 'NR==2{printf "%.1f%%", $3*100/$2 }')                                      │"
+    fi
+    if command -v df >/dev/null 2>&1; then
+        echo "│   💿 磁盘使用: $(df -h / | awk 'NR==2{print $5}')                                        │"
+    fi
+    if command -v uptime >/dev/null 2>&1; then
+        echo "│   ⚡ 负载均衡: $(uptime | awk -F'load average:' '{ print $2 }' | sed 's/^[ \t]*//')                                      │"
+    fi
+    echo "└─────────────────────────────────────────────────────────────┘"
+    echo ""
+    echo "╔══════════════════════════════════════════════════════════════╗"
+    echo "║                    ⚡ 详细状态检查完成！ ⚡                   ║"
+    echo "╚══════════════════════════════════════════════════════════════╝"
 }
 
 # 安装和配置 Dante
@@ -66,7 +198,7 @@ install_dante() {
     # 2. 安装 dante-server
     echo ">>> [1/6] 正在安装 dante-server..."
     if [ -x "$(command -v apt-get)" ]; then
-        apt-get update > /dev/null
+        apt-get update > /dev/null 2>&1
         apt-get install -y dante-server
     elif [ -x "$(command -v yum)" ]; then
         yum install -y epel-release
@@ -128,28 +260,55 @@ EOF
 
     # 6. 启动服务并设置开机自启
     echo ">>> [5/6] 正在启动 danted 服务并设置开机自启..."
-    systemctl restart danted
-    systemctl enable danted
-    echo ">>> danted 服务已启动。"
+    if systemctl restart danted 2>/dev/null && systemctl enable danted 2>/dev/null; then
+        echo ">>> danted 服务已启动。"
+    else
+        echo ">>> 警告：服务启动可能有问题，继续检查状态..."
+    fi
 
     # 7. 监控并确认服务状态
     echo ">>> [6/6] 正在检查服务运行状态..."
-    sleep 1
-    if systemctl is-active --quiet danted; then
-        PUBLIC_IP=$(curl -s http://ipv4.icanhazip.com/)
-        echo
-        echo "============================================"
-        echo "✅ SOCKS5 代理已成功安装并启动！"
-        echo "--------------------------------------------"
-        echo "连接信息: SOCKS5:$PUBLIC_IP:$PORT:root:[系统用户密码]"
-        echo "认证方式: 使用您VPS的系统用户和密码 (如 'root')"
-        echo "============================================"
+    # 等待服务完全启动，但减少等待时间
+    sleep 0.5
+
+    # 重试机制：最多尝试3次检查服务状态
+    local retry_count=0
+    local max_retries=3
+    local service_running=false
+
+    while [ $retry_count -lt $max_retries ]; do
+        if systemctl is-active --quiet danted 2>/dev/null; then
+            service_running=true
+            break
+        fi
+        retry_count=$((retry_count + 1))
+        if [ $retry_count -lt $max_retries ]; then
+            echo ">>> 第 $retry_count 次检查失败，重试中..."
+            sleep 1
+        fi
+    done
+
+    if [ "$service_running" = true ]; then
+        # 获取公网IP，使用超时机制
+        PUBLIC_IP=$(timeout 5 curl -s http://ipv4.icanhazip.com/ 2>/dev/null || echo "获取失败")
+        echo ""
+        echo "╔══════════════════════════════════════════════════════════════╗"
+        echo "║                  🎉 SOCKS5 代理安装成功！ 🎉                 ║"
+        echo "╠══════════════════════════════════════════════════════════════╣"
+        echo "║  📡 连接信息: socks5://$PUBLIC_IP:$PORT                       ║"
+        echo "║  🔐 认证方式: 系统用户密码 (如 root)                         ║"
+        echo "║  ✅ 服务状态: 运行中                                         ║"
+        echo "╚══════════════════════════════════════════════════════════════╝"
     else
-        echo
-        echo "============================================"
-        echo "❌ 错误：danted 服务启动失败！"
-        echo "请运行 'journalctl -u danted' 命令查看详细错误日志。"
-        echo "============================================"
+        echo ""
+        echo "╔══════════════════════════════════════════════════════════════╗"
+        echo "║                  ❌ SOCKS5 服务启动失败！ ❌                  ║"
+        echo "╠══════════════════════════════════════════════════════════════╣"
+        echo "║  🔍 请运行以下命令查看详细错误日志：                         ║"
+        echo "║     journalctl -u danted --no-pager -l                      ║"
+        echo "║  📝 或检查配置文件：                                         ║"
+        echo "║     cat /etc/danted.conf                                     ║"
+        echo "╚══════════════════════════════════════════════════════════════╝"
     fi
 }
 
@@ -219,7 +378,7 @@ install_squid() {
     echo
     echo ">>> [1/4] 正在安装 Squid 和认证工具..."
     if [ -x "$(command -v apt-get)" ]; then
-        apt-get update > /dev/null
+        apt-get update > /dev/null 2>&1
         apt-get install -y squid apache2-utils
     elif [ -x "$(command -v yum)" ]; then
         yum install -y squid httpd-tools
@@ -284,6 +443,10 @@ EOF
     chown proxy:proxy /etc/squid/passwd
     chmod 640 /etc/squid/passwd
 
+    # 保存密码到临时文件供状态检查使用
+    echo "$PASS" > /tmp/squid_password
+    chmod 600 /tmp/squid_password
+
     echo ">>> [4/4] 正在启动服务..."
     systemctl restart squid
     systemctl enable squid
@@ -297,21 +460,47 @@ EOF
     fi
 
     # 检查服务状态
-    sleep 2
-    if systemctl is-active --quiet squid; then
-        PUBLIC_IP=$(curl -s http://ipv4.icanhazip.com/)
-        echo
-        echo "============================================"
-        echo "✅ HTTP 代理已成功安装并启动！"
-        echo "--------------------------------------------"
-        echo "连接信息: http:$PUBLIC_IP:$PORT:$USER:$PASS"
-        echo "============================================"
+    echo ">>> 正在检查 Squid 服务状态..."
+    sleep 1
+
+    # 重试机制检查服务状态
+    local retry_count=0
+    local max_retries=3
+    local service_running=false
+
+    while [ $retry_count -lt $max_retries ]; do
+        if systemctl is-active --quiet squid 2>/dev/null; then
+            service_running=true
+            break
+        fi
+        retry_count=$((retry_count + 1))
+        if [ $retry_count -lt $max_retries ]; then
+            echo ">>> 第 $retry_count 次检查失败，重试中..."
+            sleep 1
+        fi
+    done
+
+    if [ "$service_running" = true ]; then
+        PUBLIC_IP=$(timeout 5 curl -s http://ipv4.icanhazip.com/ 2>/dev/null || echo "获取失败")
+        echo ""
+        echo "╔══════════════════════════════════════════════════════════════╗"
+        echo "║                   🎉 HTTP 代理安装成功！ 🎉                  ║"
+        echo "╠══════════════════════════════════════════════════════════════╣"
+        echo "║  📡 连接信息: http://$PUBLIC_IP:$PORT                         ║"
+        echo "║  👤 用户名: $USER                                            ║"
+        echo "║  🔑 密码: $PASS                                              ║"
+        echo "║  ✅ 服务状态: 运行中                                         ║"
+        echo "╚══════════════════════════════════════════════════════════════╝"
     else
-        echo
-        echo "============================================"
-        echo "❌ 错误：Squid 服务启动失败！"
-        echo "请运行 'journalctl -u squid' 命令查看详细错误日志。"
-        echo "============================================"
+        echo ""
+        echo "╔══════════════════════════════════════════════════════════════╗"
+        echo "║                   ❌ HTTP 服务启动失败！ ❌                   ║"
+        echo "╠══════════════════════════════════════════════════════════════╣"
+        echo "║  🔍 请运行以下命令查看详细错误日志：                         ║"
+        echo "║     journalctl -u squid --no-pager -l                       ║"
+        echo "║  📝 或检查配置文件：                                         ║"
+        echo "║     cat /etc/squid/squid.conf                                ║"
+        echo "╚══════════════════════════════════════════════════════════════╝"
     fi
 }
 
@@ -376,20 +565,24 @@ check_root
 # 主菜单循环
 while true; do
     check_status
-    echo "请选择您要执行的操作:"
+    echo "🎯 请选择您要执行的操作:"
+    echo ""
+    echo "┌─ 🔵 SOCKS5 代理管理 ─────────────────────────────────────────┐"
+    echo "│  1️⃣  安装 SOCKS5 (Dante) 代理                               │"
+    echo "│  2️⃣  卸载 SOCKS5 (Dante) 代理                               │"
+    echo "└─────────────────────────────────────────────────────────────┘"
+    echo ""
+    echo "┌─ 🟠 HTTP 代理管理 ───────────────────────────────────────────┐"
+    echo "│  3️⃣  安装 HTTP (Squid) 代理                                 │"
+    echo "│  4️⃣  卸载 HTTP (Squid) 代理                                 │"
+    echo "└─────────────────────────────────────────────────────────────┘"
+    echo ""
+    echo "┌─ ⚙️  其他选项 ────────────────────────────────────────────────┐"
+    echo "│  5️⃣  快速状态检查（详细版）                                 │"
+    echo "│  0️⃣  退出脚本                                               │"
+    echo "└─────────────────────────────────────────────────────────────┘"
     echo
-    echo "=== SOCKS5 代理管理 ==="
-    echo "  1) 安装 SOCKS5 (Dante) 代理"
-    echo "  2) 卸载 SOCKS5 (Dante) 代理"
-    echo
-    echo "=== HTTP 代理管理 ==="
-    echo "  3) 安装 HTTP (Squid) 代理"
-    echo "  4) 卸载 HTTP (Squid) 代理"
-    echo
-    echo "=== 其他选项 ==="
-    echo "  0) 退出脚本"
-    echo
-    read -p "请输入选项 [0-4]: " main_choice
+    read -p "请输入选项 [0-5]: " main_choice
 
     case $main_choice in
         1)
@@ -404,12 +597,15 @@ while true; do
         4)
             uninstall_squid
             ;;
+        5)
+            quick_detailed_status
+            ;;
         0)
             echo "退出脚本。"
             exit 0
             ;;
         *)
-            echo "无效输入，请输入 0-4 之间的数字。"
+            echo "无效输入，请输入 0-5 之间的数字。"
             ;;
     esac
     echo
