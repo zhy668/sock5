@@ -24,6 +24,91 @@ check_root() {
     exit 1
   fi
 }
+# ---------------- APT/YUM 加速与智能更新（仅脚本内生效） ----------------
+# 说明：
+# - 不修改系统源，仅在命令层面优化：强制IPv4、超时、重试、跳过推荐包、等待锁
+# - 智能跳过 apt-get update：索引文件8小时内已更新则跳过（可用 APT_UPDATE_MAX_AGE 覆盖，单位秒）
+
+# 等待 apt/dpkg 锁，最多等待 N 秒
+apt_wait_for_locks() {
+  local timeout=${1:-60}
+  local waited=0
+  while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 \
+     || fuser /var/lib/apt/lists/lock >/dev/null 2>&1 \
+     || fuser /var/lib/dpkg/lock >/dev/null 2>&1; do
+    if [ "$waited" -ge "$timeout" ]; then
+      echo ">>> 警告: 等待 apt/dpkg 锁超时(${timeout}s)，尝试继续..."
+      return 0
+    fi
+    echo -ne ">>> 等待 apt/dpkg 锁释放... ${waited}s\r"
+    sleep 2
+    waited=$((waited+2))
+  done
+  echo -ne "\r"
+}
+
+# 获取 /var/lib/apt/lists 最新文件的修改时间（epoch秒）
+apt_lists_latest_mtime() {
+  local latest=0 ts f
+  for f in /var/lib/apt/lists/*; do
+    [ -f "$f" ] || continue
+    ts=$(stat -c %Y "$f" 2>/dev/null || echo 0)
+    [ "$ts" -gt "$latest" ] && latest="$ts"
+  done
+  echo "$latest"
+}
+
+# 智能执行 apt-get update（必要时才更新）
+apt_smart_update_if_needed() {
+  local max_age=${APT_UPDATE_MAX_AGE:-28800}  # 默认8小时
+  local now=$(date +%s)
+  local latest=$(apt_lists_latest_mtime)
+  if [ "$latest" -gt 0 ] && [ $((now-latest)) -lt "$max_age" ]; then
+    echo ">>> apt 索引较新(<=${max_age}s)，跳过 apt-get update"
+    return 0
+  fi
+  apt_wait_for_locks 60
+  DEBIAN_FRONTEND=noninteractive \
+  apt-get -o Acquire::ForceIPv4=true \
+          -o Acquire::Retries=3 \
+          -o Acquire::http::Timeout=10 \
+          -o Acquire::Languages=none \
+          update -y > /dev/null 2>&1 || true
+}
+
+# 快速安装（APT）：强制IPv4、重试、超时、无推荐包
+apt_fast_install() {
+  apt_wait_for_locks 60
+  DEBIAN_FRONTEND=noninteractive \
+  apt-get -o Acquire::ForceIPv4=true \
+          -o Acquire::Retries=3 \
+          -o Acquire::http::Timeout=10 \
+          -o Dpkg::Use-Pty=0 \
+          -o Acquire::Languages=none \
+          install -y --no-install-recommends "$@"
+}
+
+# YUM 加速：建立缓存与快速安装
+yum_fast_makecache() {
+  yum -y makecache fast >/dev/null 2>&1 || yum -y makecache >/dev/null 2>&1 || true
+}
+
+yum_fast_install() {
+  yum -y --setopt=timeout=10 --setopt=retries=3 install "$@"
+}
+
+# 计时器：打印命令耗时（秒）
+measure() {
+  local label="$1"; shift
+  local start=$(date +%s)
+  "$@"
+  local code=$?
+  local end=$(date +%s)
+  echo ">>> ${label} 用时 $((end-start)) 秒 (exit=$code)"
+  return $code
+}
+# ---------------------------------------------------------------------
+
 
 # 缓存公网IP以提高状态检查速度
 get_cached_public_ip() {
@@ -124,11 +209,11 @@ install_dante() {
     # 2. 安装 dante-server
     echo ">>> [1/6] 正在安装 dante-server..."
     if [ -x "$(command -v apt-get)" ]; then
-        apt-get update > /dev/null 2>&1
-        apt-get install -y dante-server
+        apt_smart_update_if_needed
+        measure "dante-server 安装" apt_fast_install dante-server
     elif [ -x "$(command -v yum)" ]; then
-        yum install -y epel-release
-        yum install -y dante-server
+        yum_fast_makecache
+        measure "dante-server 安装(yum)" yum_fast_install dante-server
     else
         echo "错误：不支持的操作系统。请在 Debian/Ubuntu/CentOS 上运行。"
         exit 1
@@ -147,7 +232,7 @@ EOF
 
     # 4. 写入 dante-server 配置文件
     echo ">>> [3/6] 正在生成 danted.conf 配置文件..."
-    IFACE=$(ip route get 8.8.8.8 | grep -oP 'dev \K\S+')
+    IFACE=$(ip -4 route get 8.8.8.8 2>/dev/null | grep -oP 'dev \K\S+' || ip route get 8.8.8.8 | awk '{for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}')
     CONF="/etc/danted.conf"
     [ -f $CONF ] && mv $CONF "$CONF.bak.$(date +%F-%T)"
     tee $CONF > /dev/null <<EOF
@@ -242,23 +327,23 @@ EOF
 # Uninstall Dante
 uninstall_dante() {
     echo
-    read -p "Are you sure you want to uninstall SOCKS5 (Dante) proxy? This will delete all configurations. [y/N]: " choice
+    read -p "确定是否卸载 SOCKS5 (Dante) 代理? 这会删除所有相关配置.  [y/N]: " choice
     case "$choice" in
       y|Y )
-        echo "===== Starting SOCKS5 (Dante) Proxy Uninstallation ====="
+        echo "===== 开始卸载 SOCKS5 (Dante) 代理 ====="
 
         local port=$(grep -oP 'port = \K\d+' /etc/danted.conf || echo "")
 
         # Stop and disable service
         if systemctl list-unit-files | grep -q 'danted.service'; then
-            echo ">>> [1/4] Stopping and disabling danted service..."
+            echo ">>> [1/4] 停止并禁用 danted 服务... "
             systemctl stop danted || true
             systemctl disable danted || true
         fi
 
         # Close firewall port
         if [ ! -z "$port" ]; then
-            echo ">>> [2/4] Closing firewall port $port..."
+            echo ">>> [2/4] 关闭防火墙端口  $port..."
             if command -v ufw >/dev/null 2>&1; then
                 ufw delete allow $port/tcp
             elif command -v firewall-cmd >/dev/null 2>&1; then
@@ -268,7 +353,7 @@ uninstall_dante() {
         fi
 
         # Uninstall package
-        echo ">>> [3/4] Uninstalling dante-server package..."
+        echo ">>> [3/4] 卸载 dante-server 软件包..."
         if [ -x "$(command -v apt-get)" ]; then
             apt-get purge -y dante-server > /dev/null
         elif [ -x "$(command -v yum)" ]; then
@@ -276,49 +361,50 @@ uninstall_dante() {
         fi
 
         # Clean up remaining files
-        echo ">>> [4/4] Cleaning up remaining configuration files..."
+        echo ">>> [4/4] 删除残留配置文件..."
         rm -f /etc/danted.conf*
         rm -f /etc/pam.d/danted
 
         echo
-        echo "SOCKS5 (Dante) proxy has been successfully uninstalled."
+        echo "SOCKS5 代理已成功卸载."
         ;;
       * )
-        echo "Operation cancelled."
+        echo "操作取消。"
         ;;
     esac
 }
 
-# Install and configure Squid HTTP proxy
+# 安装和配置 Squid HTTP 代理
 install_squid() {
     echo
-    echo "===== Starting HTTP (Squid) Proxy Installation ====="
-    read -p "Enter HTTP proxy port [default: 8888]: " PORT
+    echo "===== 开始安装 HTTP 代理 ====="
+    read -p "输入 HTTP proxy 端口 [默认: 8888]: " PORT
     PORT=${PORT:-8888}
 
-    read -p "Enter proxy username [default: user]: " USER
+    read -p "输入 proxy 用户名 [默认: user]: " USER
     USER=${USER:-user}
 
-    read -p "Enter proxy password [default: password123]: " PASS
+    read -p "输入 proxy 密码 [默认: password123]: " PASS
     PASS=${PASS:-password123}
 
     echo
-    echo ">>> [1/4] Installing Squid and authentication tools..."
+    echo ">>> [1/4] 安装 Squid 和授权工具..."
     if [ -x "$(command -v apt-get)" ]; then
-        apt-get update > /dev/null 2>&1
-        apt-get install -y squid apache2-utils
+        apt_smart_update_if_needed
+        measure "squid+auth 工具安装" apt_fast_install squid apache2-utils
     elif [ -x "$(command -v yum)" ]; then
-        yum install -y squid httpd-tools
+        yum_fast_makecache
+        measure "squid+auth 工具安装(yum)" yum_fast_install squid httpd-tools
     else
-        echo "Error: Unsupported system. Only supports Debian/Ubuntu and CentOS/RHEL."
+        echo "错误：不支持的操作系统。仅支持 Debian/Ubuntu 和 CentOS/RHEL"
         exit 1
     fi
 
     echo ">>> [2/4] Configuring Squid..."
-    # Backup original configuration
+    # 备份原始配置文件
     cp /etc/squid/squid.conf /etc/squid/squid.conf.backup
 
-    # Create simplified configuration
+    # 创建简单配置文件
     cat > /etc/squid/squid.conf << EOF
 # Squid HTTP proxy configuration file
 http_port $PORT
@@ -365,7 +451,7 @@ via off
 forwarded_for off
 EOF
 
-    echo ">>> [3/4] Creating user authentication..."
+    echo ">>> [3/4] 创建授权 ..."
     htpasswd -cb /etc/squid/passwd "$USER" "$PASS"
     chown proxy:proxy /etc/squid/passwd
     chmod 640 /etc/squid/passwd
@@ -379,11 +465,11 @@ EOF
     chmod 600 /etc/squid/.password
     chown proxy:proxy /etc/squid/.password 2>/dev/null || true
 
-    echo ">>> [4/4] Starting service..."
+    echo ">>> [4/4] 启动服务并设置开机自启..."
     systemctl restart squid
     systemctl enable squid
 
-    # Configure firewall
+    # 配置防火墙
     if command -v ufw >/dev/null 2>&1; then
         ufw allow $PORT/tcp
     elif command -v firewall-cmd >/dev/null 2>&1; then
@@ -391,8 +477,8 @@ EOF
         firewall-cmd --reload
     fi
 
-    # Check service status
-    echo ">>> Checking Squid service status..."
+    # 检查服务状态
+    echo ">>> 检查 Squid 服务状态..."
     sleep 1
 
     # Retry mechanism to check service status
@@ -436,19 +522,19 @@ EOF
     fi
 }
 
-# Uninstall Squid HTTP proxy
+# 卸载 Squid HTTP 代理
 uninstall_squid() {
     echo
-    read -p "Are you sure you want to uninstall HTTP (Squid) proxy? This will delete all configurations. [y/N]: " choice
+    read -p "确定是否卸载 HTTP (Squid) 代理? 这会删除所有相关配置. [y/N]: " choice
     case "$choice" in
       y|Y )
-        echo "===== Starting HTTP (Squid) Proxy Uninstallation ====="
+        echo "===== 开始卸载 HTTP (Squid) 代理 ====="
 
         local port=$(grep -oP 'http_port\s+\K\d+' /etc/squid/squid.conf || echo "")
 
-        # Stop and disable service
+        # 停止并禁用服务
         if systemctl list-unit-files | grep -q 'squid.service'; then
-            echo ">>> [1/4] Stopping and disabling squid service..."
+            echo ">>> [1/4] 停止并禁用 squid service..."
             systemctl stop squid || true
             systemctl disable squid || true
         fi
@@ -473,18 +559,18 @@ uninstall_squid() {
         fi
 
         # Clean up configuration files
-        echo ">>> [4/4] Cleaning up configuration files..."
+        echo ">>> [4/4] 清理配置文件..."
         rm -rf /etc/squid
         rm -rf /var/spool/squid
         rm -rf /var/log/squid
 
         echo
         echo "============================================"
-        echo " HTTP (Squid) proxy has been successfully uninstalled!"
+        echo " HTTP (Squid) proxy 成功卸载!"
         echo "============================================"
         ;;
       * )
-        echo "Operation cancelled."
+        echo "操作取消."
         ;;
     esac
 }
