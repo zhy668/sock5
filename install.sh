@@ -98,12 +98,12 @@ check_status() {
             fi
         fi
 
-        echo -e "${CYAN}|${NC} ${BLUE}[HTTP]${NC}   ${GREEN}[OK] 运行中${NC}                                  ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}    ${YELLOW}连接: ${WHITE}http://$public_ip:$http_port${NC}                 ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}    ${YELLOW}用户: ${WHITE}$http_user${NC}                                    ${CYAN}|${NC}"
-        echo -e "${CYAN}|${NC}    ${YELLOW}密码: ${WHITE}$http_pass${NC}                                      ${CYAN}|${NC}"
+        echo -e "${NC} ${BLUE}[HTTP]${NC}   ${GREEN}[OK] 运行中${NC}                                  ${NC}"
+        echo -e "${NC}    ${YELLOW}连接: ${WHITE}http://$public_ip:$http_port${NC}                 ${NC}"
+        echo -e "${NC}    ${YELLOW}用户: ${WHITE}$http_user${NC}                                    ${NC}"
+        echo -e "${NC}    ${YELLOW}密码: ${WHITE}$http_pass${NC}                                      ${NC}"
     else
-        echo -e "${CYAN}|${NC} ${BLUE}[HTTP]${NC}   ${RED}[X] 未安装或未运行${NC}                         ${CYAN}|${NC}"
+        echo -e "${NC} ${BLUE}[HTTP]${NC}   ${RED}[X] 未安装或未运行${NC}                         ${NC}"
     fi
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     echo ""
@@ -506,13 +506,13 @@ while true; do
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     echo ""
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
-    echo -e "${CYAN}|${NC} ${BLUE}[HTTP 代理管理]${NC}                                           ${CYAN}|${NC}"
-    echo -e "${CYAN}|${NC}  ${WHITE}3)${NC} ${GREEN}安装 HTTP (Squid) 代理${NC}                                 ${CYAN}|${NC}"
-    echo -e "${CYAN}|${NC}  ${WHITE}4)${NC} ${RED}卸载 HTTP (Squid) 代理${NC}                                 ${CYAN}|${NC}"
+    echo -e "${NC} ${BLUE}[HTTP 代理管理]${NC}                                          ${NC}"
+    echo -e "${NC}  ${WHITE}3)${NC} ${GREEN}安装 HTTP (Squid) 代理${NC}                                 ${NC}"
+    echo -e "${NC}  ${WHITE}4)${NC} ${RED}卸载 HTTP (Squid) 代理${NC}                                 ${NC}"
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     echo ""
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
-    echo -e "${CYAN}|${NC}  ${WHITE}0)${NC} ${BOLD}退出脚本${NC}                                               ${CYAN}|${NC}"
+    echo -e "${NC}  ${WHITE}0)${NC} ${BOLD}退出脚本${NC}                                               ${NC}"
     echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     echo
     read -p "请输入选项 [0-4]: " main_choice
