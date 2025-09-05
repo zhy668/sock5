@@ -13,14 +13,9 @@
 
 ## 🚀 快速开始
 
-### SOCKS5 代理一键安装
+### 一键安装（支持SOCKS5和HTTP代理）
 ```bash
 bash <(curl -sL https://raw.githubusercontent.com/zhy668/sock5/refs/heads/master/install.sh)
-```
-
-### HTTP 代理一键安装
-```bash
-bash <(curl -sL https://raw.githubusercontent.com/zhy668/sock5/refs/heads/master/http_install.sh)
 ```
 
 ### 手动安装

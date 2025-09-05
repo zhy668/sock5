@@ -26,8 +26,9 @@ check_status() {
         echo "  - SOCKS5 (Dante): ❌ 未安装"
     elif systemctl is-active --quiet danted; then
         local socks_port=$(grep -oP 'port = \K\d+' /etc/danted.conf || echo "未知")
+        local public_ip=$(curl -s http://ipv4.icanhazip.com/ || curl -s http://checkip.amazonaws.com/ || echo "未知")
         echo "  - SOCKS5 (Dante): ✅ 运行中"
-        echo "    连接信息: socks5:132.145.123.187:$socks_port:root:Wyatt6126540@01"
+        echo "    连接信息: socks5:$public_ip:$socks_port:root:[系统用户密码]"
     else
         echo "  - SOCKS5 (Dante): ❌ 已安装但未运行"
     fi
@@ -35,8 +36,17 @@ check_status() {
     # 检查HTTP (Squid)状态
     if systemctl is-active --quiet squid; then
         local http_port=$(grep -oP 'http_port\s+\K\d+' /etc/squid/squid.conf || echo "未知")
+        local public_ip=$(curl -s http://ipv4.icanhazip.com/ || curl -s http://checkip.amazonaws.com/ || echo "未知")
+        local http_user="未知"
+        local http_pass="[已设置]"
+
+        # 尝试从认证文件中获取用户名
+        if [ -f "/etc/squid/passwd" ]; then
+            http_user=$(cut -d: -f1 /etc/squid/passwd | head -1)
+        fi
+
         echo "  - HTTP (Squid): ✅ 运行中"
-        echo "    连接信息: http:132.145.123.187:$http_port:zhy668:zhy6258460"
+        echo "    连接信息: http:$public_ip:$http_port:$http_user:$http_pass"
     else
         echo "  - HTTP (Squid): ❌ 未安装或未运行"
     fi
@@ -131,8 +141,7 @@ EOF
         echo "============================================"
         echo "✅ SOCKS5 代理已成功安装并启动！"
         echo "--------------------------------------------"
-        echo "服务器IP: $PUBLIC_IP"
-        echo "端口: $PORT"
+        echo "连接信息: SOCKS5:$PUBLIC_IP:$PORT:root:[系统用户密码]"
         echo "认证方式: 使用您VPS的系统用户和密码 (如 'root')"
         echo "============================================"
     else
@@ -201,11 +210,11 @@ install_squid() {
     read -p "请输入HTTP代理端口 [默认: 8888]: " PORT
     PORT=${PORT:-8888}
 
-    read -p "请输入代理用户名 [默认: zhy668]: " USER
-    USER=${USER:-zhy668}
+    read -p "请输入代理用户名 [默认: user]: " USER
+    USER=${USER:-user}
 
-    read -p "请输入代理密码 [默认: zhy6258460]: " PASS
-    PASS=${PASS:-zhy6258460}
+    read -p "请输入代理密码 [默认: password123]: " PASS
+    PASS=${PASS:-password123}
 
     echo
     echo ">>> [1/4] 正在安装 Squid 和认证工具..."
