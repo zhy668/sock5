@@ -5,6 +5,17 @@ set -e
 
 # --- 全局函数定义 ---
 
+# 颜色定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color
+
 # 检查是否以root用户运行
 check_root() {
   if [[ $EUID -ne 0 ]]; then
@@ -44,29 +55,29 @@ get_cached_public_ip() {
 # 检查并显示当前服务状态
 check_status() {
     clear
-    echo "╔══════════════════════════════════════════════════════════════╗"
-    echo "║                    🚀 代理服务管理中心 🚀                    ║"
-    echo "║                HTTP & SOCKS5 代理一键管理工具                ║"
-    echo "╚══════════════════════════════════════════════════════════════╝"
+    echo -e "${BOLD}${CYAN}================================================================${NC}"
+    echo -e "${BOLD}${WHITE}                    >> 代理服务管理中心 <<                    ${NC}"
+    echo -e "${BOLD}${WHITE}                HTTP & SOCKS5 代理一键管理工具                ${NC}"
+    echo -e "${BOLD}${CYAN}================================================================${NC}"
     echo ""
-    echo "📊 当前服务状态:"
+    echo -e "${BOLD}${YELLOW}[状态检查] 当前服务状态:${NC}"
 
     # 获取公网IP（使用缓存机制，避免重复网络请求）
     local public_ip=$(get_cached_public_ip)
 
     # 检查SOCKS5 (Dante)状态
-    echo "┌─────────────────────────────────────────────────────────────┐"
+    echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     if ! systemctl list-unit-files 2>/dev/null | grep -q 'danted.service'; then
-        echo "│ 🔵 SOCKS5 (Dante): ❌ 未安装                                │"
+        echo -e "${CYAN}|${NC} ${BLUE}[SOCKS5]${NC} ${RED}[X] 未安装${NC}                                    ${CYAN}|${NC}"
     elif systemctl is-active --quiet danted 2>/dev/null; then
         local socks_port=$(grep -oP 'port = \K\d+' /etc/danted.conf 2>/dev/null || echo "未知")
-        echo "│ 🔵 SOCKS5 (Dante): ✅ 运行中                               │"
-        echo "│    📡 连接信息: socks5://$public_ip:$socks_port              │"
-        echo "│    🔐 认证方式: 系统用户密码                                │"
+        echo -e "${CYAN}|${NC} ${BLUE}[SOCKS5]${NC} ${GREEN}[√] 运行中${NC}                                   ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}    ${YELLOW}连接: ${WHITE}socks5://$public_ip:$socks_port${NC}              ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}    ${YELLOW}认证: ${WHITE}系统用户密码${NC}                                ${CYAN}|${NC}"
     else
-        echo "│ 🔵 SOCKS5 (Dante): ❌ 已安装但未运行                       │"
+        echo -e "${CYAN}|${NC} ${BLUE}[SOCKS5]${NC} ${RED}[X] 已安装但未运行${NC}                           ${CYAN}|${NC}"
     fi
-    echo "├─────────────────────────────────────────────────────────────┤"
+    echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
 
     # 检查HTTP (Squid)状态
     if systemctl is-active --quiet squid 2>/dev/null; then
@@ -85,30 +96,30 @@ check_status() {
             fi
         fi
 
-        echo "│ 🟠 HTTP (Squid): ✅ 运行中                                  │"
-        echo "│    📡 连接信息: http://$public_ip:$http_port                 │"
-        echo "│    👤 用户名: $http_user                                    │"
-        echo "│    🔑 密码: $http_pass                                      │"
+        echo -e "${CYAN}|${NC} ${PURPLE}[HTTP]${NC}   ${GREEN}[√] 运行中${NC}                                  ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}    ${YELLOW}连接: ${WHITE}http://$public_ip:$http_port${NC}                 ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}    ${YELLOW}用户: ${WHITE}$http_user${NC}                                    ${CYAN}|${NC}"
+        echo -e "${CYAN}|${NC}    ${YELLOW}密码: ${WHITE}$http_pass${NC}                                      ${CYAN}|${NC}"
     else
-        echo "│ 🟠 HTTP (Squid): ❌ 未安装或未运行                         │"
+        echo -e "${CYAN}|${NC} ${PURPLE}[HTTP]${NC}   ${RED}[X] 未安装或未运行${NC}                         ${CYAN}|${NC}"
     fi
-    echo "└─────────────────────────────────────────────────────────────┘"
+    echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     echo ""
 }
 
 # 快速详细状态检查
 quick_detailed_status() {
     clear
-    echo "╔══════════════════════════════════════════════════════════════╗"
-    echo "║                    📊 详细状态检查报告 📊                    ║"
-    echo "╚══════════════════════════════════════════════════════════════╝"
+    echo -e "${BOLD}${CYAN}================================================================${NC}"
+    echo -e "${BOLD}${WHITE}                    >> 详细状态检查报告 <<                    ${NC}"
+    echo -e "${BOLD}${CYAN}================================================================${NC}"
     echo ""
 
     # 获取公网IP
     local public_ip=$(get_cached_public_ip)
-    echo "🌐 服务器信息:"
-    echo "   📍 公网IP: $public_ip"
-    echo "   🖥️  系统: $(uname -s) $(uname -r)"
+    echo -e "${BOLD}${YELLOW}[服务器信息]${NC}"
+    echo -e "   ${YELLOW}公网IP:${NC} ${WHITE}$public_ip${NC}"
+    echo -e "   ${YELLOW}系统:${NC}   ${WHITE}$(uname -s) $(uname -r)${NC}"
     echo ""
 
     # 检查SOCKS5状态
@@ -494,11 +505,11 @@ EOF
     else
         echo ""
         echo "╔══════════════════════════════════════════════════════════════╗"
-        echo "║                   ❌ HTTP 服务启动失败！ ❌                   ║"
+        echo "║                    HTTP 服务启动失败！                        ║"
         echo "╠══════════════════════════════════════════════════════════════╣"
-        echo "║  🔍 请运行以下命令查看详细错误日志：                         ║"
-        echo "║     journalctl -u squid --no-pager -l                       ║"
-        echo "║  📝 或检查配置文件：                                         ║"
+        echo "║     请运行以下命令查看详细错误日志：                           ║"
+        echo "║     journalctl -u squid --no-pager -l                        ║"
+        echo "║     或检查配置文件：                                          ║"
         echo "║     cat /etc/squid/squid.conf                                ║"
         echo "╚══════════════════════════════════════════════════════════════╝"
     fi
@@ -548,7 +559,7 @@ uninstall_squid() {
 
         echo
         echo "============================================"
-        echo "✅ HTTP (Squid) 代理已成功卸载！"
+        echo " HTTP (Squid) 代理已成功卸载！"
         echo "============================================"
         ;;
       * )
@@ -565,22 +576,25 @@ check_root
 # 主菜单循环
 while true; do
     check_status
-    echo "🎯 请选择您要执行的操作:"
+    echo -e "${BOLD}${YELLOW}>> 请选择您要执行的操作:${NC}"
     echo ""
-    echo "┌─ 🔵 SOCKS5 代理管理 ─────────────────────────────────────────┐"
-    echo "│  1️⃣  安装 SOCKS5 (Dante) 代理                               │"
-    echo "│  2️⃣  卸载 SOCKS5 (Dante) 代理                               │"
-    echo "└─────────────────────────────────────────────────────────────┘"
+    echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
+    echo -e "${CYAN}|${NC} ${BLUE}[SOCKS5 代理管理]${NC}                                         ${CYAN}|${NC}"
+    echo -e "${CYAN}|${NC}  ${WHITE}1)${NC} ${GREEN}安装 SOCKS5 (Dante) 代理${NC}                               ${CYAN}|${NC}"
+    echo -e "${CYAN}|${NC}  ${WHITE}2)${NC} ${RED}卸载 SOCKS5 (Dante) 代理${NC}                               ${CYAN}|${NC}"
+    echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     echo ""
-    echo "┌─ 🟠 HTTP 代理管理 ───────────────────────────────────────────┐"
-    echo "│  3️⃣  安装 HTTP (Squid) 代理                                 │"
-    echo "│  4️⃣  卸载 HTTP (Squid) 代理                                 │"
-    echo "└─────────────────────────────────────────────────────────────┘"
+    echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
+    echo -e "${CYAN}|${NC} ${PURPLE}[HTTP 代理管理]${NC}                                           ${CYAN}|${NC}"
+    echo -e "${CYAN}|${NC}  ${WHITE}3)${NC} ${GREEN}安装 HTTP (Squid) 代理${NC}                                 ${CYAN}|${NC}"
+    echo -e "${CYAN}|${NC}  ${WHITE}4)${NC} ${RED}卸载 HTTP (Squid) 代理${NC}                                 ${CYAN}|${NC}"
+    echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     echo ""
-    echo "┌─ ⚙️  其他选项 ────────────────────────────────────────────────┐"
-    echo "│  5️⃣  快速状态检查（详细版）                                 │"
-    echo "│  0️⃣  退出脚本                                               │"
-    echo "└─────────────────────────────────────────────────────────────┘"
+    echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
+    echo -e "${CYAN}|${NC} ${YELLOW}[其他选项]${NC}                                                ${CYAN}|${NC}"
+    echo -e "${CYAN}|${NC}  ${WHITE}5)${NC} ${BOLD}快速状态检查（详细版）${NC}                                 ${CYAN}|${NC}"
+    echo -e "${CYAN}|${NC}  ${WHITE}0)${NC} ${BOLD}退出脚本${NC}                                               ${CYAN}|${NC}"
+    echo -e "${CYAN}+---------------------------------------------------------------+${NC}"
     echo
     read -p "请输入选项 [0-5]: " main_choice
 
