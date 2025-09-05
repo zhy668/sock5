@@ -206,20 +206,14 @@ install_dante() {
     # 1. 获取用户输入的端口
     read -p "请输入SOCKS5代理要使用的端口 [默认 8087]: " PORT
     PORT=${PORT:-8087}
-    # 1.1 账户策略：socksuser 不存在则必须创建；也可选择使用已有系统用户
-    if ! id -u socksuser >/dev/null 2>&1; then
-        echo ">>> 未检测到 socksuser。用于SOCKS5认证的系统用户策略："
-        echo "    1) 创建 socksuser（推荐，最小权限，禁用登录shell）"
-        echo "    2) 使用已有用户（如 root 或你已有的普通用户）"
-        read -p "请选择 [1/2，默认 1]: " USER_CHOICE
-        USER_CHOICE=${USER_CHOICE:-1}
-        if [ "$USER_CHOICE" = "1" ]; then
-            useradd -m -s /usr/sbin/nologin socksuser || true
-            echo "请为 socksuser 设置密码（用于SOCKS5认证，与SSH无关）"
-            passwd socksuser || true
-        else
-            echo "你选择使用已有用户，请确保该用户存在并已设置密码。"
-        fi
+    # 1.1 认证账户：输入用于SOCKS5认证的系统用户名（默认 socksuser）。若不存在则创建。
+    read -p "请输入用于SOCKS5认证的系统用户名 [默认 socksuser]: " AUTH_USER
+    AUTH_USER=${AUTH_USER:-socksuser}
+    if ! id -u "$AUTH_USER" >/dev/null 2>&1; then
+        echo ">>> 用户 $AUTH_USER 不存在，正在创建..."
+        useradd -m -s /usr/sbin/nologin "$AUTH_USER" || true
+        echo "请为 $AUTH_USER 设置密码（用于SOCKS5认证，与SSH无关）"
+        passwd "$AUTH_USER" || true
     fi
 
     echo
@@ -238,21 +232,8 @@ install_dante() {
     fi
     echo ">>> dante-server 安装完成。"
 
-    # 3. 配置PAM认证
+    # 3. 配置PAM认证（系统用户）
     echo ">>> [2/6] 正在配置PAM认证模块..."
-    # B方案：使用 libpam-pwdfile 与独立口令文件
-    apt_smart_update_if_needed
-    if ! measure "安装 libpam-pwdfile 与 htpasswd" apt_fast_install libpam-pwdfile apache2-utils; then
-        echo ">>> 从官方源拉取失败，切换临时镜像到腾讯并重试..."
-        switch_apt_to_tencent
-        if ! measure "[重试] 安装 libpam-pwdfile 与 htpasswd" apt_fast_install libpam-pwdfile apache2-utils; then
-            echo ">>> 镜像重试仍失败，建议稍后再试或检查网络。"
-            restore_apt_sources_if_needed
-            exit 1
-        fi
-        # 安装成功后可选择是否还原源，这里保持腾讯镜像以便后续安装更快；如需还原请解除下一行注释
-        # restore_apt_sources_if_needed
-    fi
     PAM_CONF="/etc/pam.d/danted"
     tee "$PAM_CONF" > /dev/null <<EOF
 #%PAM-1.0
